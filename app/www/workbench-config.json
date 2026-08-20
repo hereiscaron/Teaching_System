@@ -1,0 +1,47 @@
+{
+  "profession": "高一班主任",
+  "profile": "education",
+  "organization_name": "烟洲中学",
+  "role_name": "班主任",
+  "user_name": "班主任",
+  "workspace_title": "教师工作台",
+  "local_persistence_required": true,
+  "deployment_mode": "local-offline",
+  "production_ready": false,
+  "storage_namespace": "workbench_a4f61bd777eeafb5",
+  "design_system": {
+    "id": "quiet-luxury-a",
+    "version": 2,
+    "palette": "warm-ivory-ink-green-sage",
+    "typography": "serif-display-system-sans-body",
+    "density": "editorial-airy"
+  },
+  "storage_strategy": {
+    "small_records_and_preferences": "localStorage",
+    "large_collections_and_attachments": "IndexedDB",
+    "autosave_debounce_ms": 350,
+    "backup_format": "versioned JSON"
+  },
+  "recommended_modules": [
+    "总览",
+    "计划",
+    "记录",
+    "评估",
+    "日程",
+    "资源",
+    "沟通",
+    "分析",
+    "行政"
+  ],
+  "reference_domain": "education",
+  "required_next_steps": [
+    "Replace every education-specific module, record, workflow and label.",
+    "Model the profession's primary objects, lifecycle, decisions, risks and evidence.",
+    "Assign a distinct composite dashboard to every final page.",
+    "Connect every create, edit, delete, reorder and draft flow to the local persistence repository.",
+    "Provide visible save status plus export, validated import and confirmed clear-data controls.",
+    "Run add/edit/delete reload tests and an export-clear-import recovery test.",
+    "Run the domain-remnant audit and validation script before delivery.",
+    "Do not claim production readiness until the chosen deployment mode's architecture, security and acceptance gates pass."
+  ]
+}

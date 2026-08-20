@@ -1,0 +1,48 @@
+:root {
+  --brand-900:#17291F; --brand-700:#1D6B4A; --brand-500:#3FA774; --brand-050:#E4F0E6;
+  --canvas:#EEF2E9; --surface:#F9FAF4; --table-head:#EDF2EB; --chrome:#DDE5DC; --border:#C9D4CA; --border-strong:#98A89B;
+  --ink:#17221B; --ink-2:#4B5C50; --ink-3:#7C8B80; --ok:#2E8B57; --warn:#A46D29;
+  --danger:#B4463D; --info:#35756B; --focus:#3FA774; --ok-soft:rgba(46,139,87,.10); --warn-soft:rgba(164,109,41,.10); --danger-soft:rgba(180,70,61,.10); --info-soft:rgba(53,117,107,.10); --ink-soft:rgba(23,34,27,.08);
+  --graphite:#17211D; --graphite-2:#25332C; --neon:#79F0A7; --sage:#DDE8D9; --ink-inverse:#F2F6ED;
+  /* 语义色（供组件引用，随主题切换） */
+  --brand-soft:rgba(120,151,131,.08); --brand-soft-strong:rgba(120,151,131,.14); --brand-soft-hover:rgba(120,151,131,.26);
+  --brand-line:rgba(56,95,75,.28); --brand-line-strong:rgba(56,95,75,.4); --brand-line-soft:rgba(56,95,75,.14);
+  --hero-tint-a:rgba(25,53,42,.94); --hero-tint-b:rgba(25,53,42,.66); --hero-tint-c:rgba(25,53,42,.06);
+  --font-body:"Songti SC","STSong","SimSun","Noto Serif SC","宋体",serif; --font-display:"Songti SC","STSong","SimSun","Noto Serif SC","宋体",serif; --font-mono:"Songti SC","STSong","SimSun","Noto Serif SC","宋体",serif;
+  --hero-image:linear-gradient(135deg,#24382d,#101914);
+  --radius:3px; --shadow-pop:0 2px 10px rgba(23,41,31,.16); --shadow-modal:0 12px 32px rgba(23,41,31,.28);
+}
+
+/* ============ 配色2（烟洲中学校徽：暗红 #7A222E + 纯白） ============
+ * 在 <html data-theme="badge"> 时生效；个人信息 → 界面主题 可切换。
+ * 键名 badge 保持兼容历史选择，显示名为"配色2"。 */
+[data-theme="badge"] {
+  --brand-900:#5C1620; --brand-700:#7A222E; --brand-500:#A33A47; --brand-050:#F7ECEE;
+  --canvas:#FFFFFF; --surface:#FFFFFF; --table-head:#F6F0F1; --chrome:#EFE6E7; --border:#E2D6D8; --border-strong:#BE9EA4;
+  --ink:#2B1A1D; --ink-2:#5E474C; --ink-3:#8F7378; --ok:#2E7D5B; --warn:#A46D29;
+  --danger:#B4463D; --info:#7A222E; --focus:#7A222E; --ok-soft:rgba(46,125,91,.10); --warn-soft:rgba(164,109,41,.10); --danger-soft:rgba(180,70,61,.10); --info-soft:rgba(122,34,46,.10); --ink-soft:rgba(43,26,29,.08);
+  --graphite:#5C1620; --graphite-2:#7A222E; --neon:#A33A47; --sage:#F1E4E6; --ink-inverse:#FFFFFF;
+  --brand-soft:rgba(122,34,46,.08); --brand-soft-strong:rgba(122,34,46,.14); --brand-soft-hover:rgba(122,34,46,.26);
+  --brand-line:rgba(122,34,46,.28); --brand-line-strong:rgba(122,34,46,.4); --brand-line-soft:rgba(122,34,46,.14);
+  --hero-tint-a:rgba(92,22,32,.94); --hero-tint-b:rgba(92,22,32,.66); --hero-tint-c:rgba(92,22,32,.06);
+  --hero-image:linear-gradient(135deg,#5C1620,#2A0A10);
+  --shadow-pop:0 2px 10px rgba(92,22,32,.16); --shadow-modal:0 12px 32px rgba(92,22,32,.28);
+}
+
+/* ============ 深夜模式（护眼深色，基于配色1的绿色品牌系） ============
+ * 在 <html data-theme="dark"> 时生效；个人信息 → 界面主题 可切换。 */
+[data-theme="dark"] {
+  /* --brand-900 兼具"最深品牌色"与"标题/激活态文字色"两种用途；
+   * 深夜模式下若保持近黑，用作文字时在深色背景上不可读 → 调亮为可读品牌绿。
+   * 顶栏/主按钮等"深色大面"已改用 --graphite（见 layout.css），不受影响。 */
+  --brand-900:#2FA468; --brand-700:#3FBF7E; --brand-500:#4FBF85; --brand-050:#13251C;
+  --canvas:#0E1113; --surface:#161B1F; --table-head:#1D252B; --chrome:#13181C; --border:#29323A; --border-strong:#3F4B55;
+  --ink:#E4EAE6; --ink-2:#A6B1AB; --ink-3:#6F7C75; --ok:#4CB782; --warn:#C79A4B;
+  --danger:#D0695E; --info:#5FA8A0; --focus:#4FBF85; --ok-soft:rgba(76,183,130,.12); --warn-soft:rgba(199,154,75,.12); --danger-soft:rgba(208,105,94,.12); --info-soft:rgba(95,168,160,.12); --ink-soft:rgba(228,234,230,.10);
+  --graphite:#0B0F12; --graphite-2:#141B18; --neon:#4FBF85; --sage:#17251E; --ink-inverse:#E4EAE6;
+  --brand-soft:rgba(79,191,133,.10); --brand-soft-strong:rgba(79,191,133,.18); --brand-soft-hover:rgba(79,191,133,.30);
+  --brand-line:rgba(79,191,133,.30); --brand-line-strong:rgba(79,191,133,.45); --brand-line-soft:rgba(79,191,133,.16);
+  --hero-tint-a:rgba(8,12,16,.96); --hero-tint-b:rgba(8,12,16,.72); --hero-tint-c:rgba(8,12,16,.12);
+  --hero-image:linear-gradient(135deg,#10181B,#06080A);
+  --shadow-pop:0 2px 10px rgba(0,0,0,.42); --shadow-modal:0 12px 32px rgba(0,0,0,.55);
+}

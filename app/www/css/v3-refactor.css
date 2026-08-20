@@ -1,0 +1,506 @@
+/* ============================================================
+ * V3 重构优化样式（独立文件，最后加载）
+ * 1. 全局 select 高度修复（19px 字号不再被裁剪）
+ * 2. 宿舍块状管理
+ * 3. 作业与自习周视图
+ * 4. 个人事务日历条目 / 成绩编辑态 / 积分表头排序
+ * ============================================================ */
+
+/* ---- 1. 全局 select 高度修复：避免内容上下被裁剪 ---- */
+.form-grid select,
+.field select,
+.toolbar select,
+#modalRoot select,
+.hw-table select {
+  min-height: 42px;
+  height: auto;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  font-size: 19px;
+}
+
+/* ---- 1.1 值日排班学生点选：按钮列表（替代原生 select，修复无法单选） ---- */
+.member-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 170px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface);
+  font-size: 19px;
+}
+.member-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--ink-2);
+  padding: 5px 14px;
+  font-size: 19px;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s, color .15s, border-color .15s, box-shadow .15s;
+}
+.member-option:hover { border-color: var(--brand-500); color: var(--brand-700); background: var(--brand-soft); }
+.member-option.selected {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--ink-inverse);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+}
+.member-option.selected::after { content: "✓"; font-size: 15px; }
+
+/* 工具栏字段拉宽：select/input 撑满 label 宽度（align-items:stretch 对替换元素不生效，
+ * 不加 width:100% 时 select 按内容自适应约 180px，长选项会被截断）。
+ * flex: 0 0 auto：字段不收缩、放不下就整块换行，保证完整展示不被压扁。 */
+.toolbar .field { flex: 0 0 auto; }
+.toolbar .field select,
+.toolbar .field input,
+.score-toolbar .field select,
+.score-toolbar .field input {
+  width: 100%;
+}
+
+/* ---- 2. 宿舍块状管理 ---- */
+.dorm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.dorm-block { display: flex; flex-direction: column; gap: 8px; padding: 18px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); text-align: left; cursor: pointer; transition: border-color .15s, transform .15s, box-shadow .15s; }
+.dorm-block:hover { border-color: var(--brand-500); transform: translateY(-2px); box-shadow: var(--shadow-pop); }
+.dorm-room { font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--brand-900); }
+.dorm-leader { font-size: 19px; color: var(--ink-2); }
+.dorm-members { display: flex; flex-wrap: wrap; gap: 6px; }
+.dorm-members i { font-style: normal; font-size: 19px; padding: 2px 10px; background: var(--brand-soft-strong); border-radius: 99px; color: var(--brand-700); }
+.dorm-score { font-size: 19px; color: var(--ink-2); }
+
+/* ---- 3. 作业与自习：周视图日历 ---- */
+.hw-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.hw-day { min-height: 240px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; transition: background .15s, border-color .15s; display: flex; flex-direction: column; }
+.hw-day:hover { background: var(--brand-soft-strong); }
+.hw-day.today { border-color: var(--brand-500); background: var(--brand-050); }
+.hw-day-head { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.hw-week-name { font-weight: 700; font-size: 19px; }
+.hw-day-date { font-size: 22px; font-weight: 700; color: var(--brand-900); }
+.hw-day-count { margin-left: auto; font-size: 19px; color: var(--ink-3); }
+.hw-day-body { flex: 1; padding: 8px; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.hw-card { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px solid var(--brand-line-soft); border-radius: 6px; background: var(--brand-soft); cursor: pointer; text-align: left; }
+.hw-card:hover { border-color: var(--brand-500); }
+.hw-subject { font-size: 19px; font-weight: 700; color: var(--brand-700); }
+.hw-content { font-size: 19px; color: var(--ink); }
+.hw-min { font-size: 16px; color: var(--ink-3); }
+.hw-empty { font-size: 19px; color: var(--ink-3); text-align: center; padding: 20px 0; }
+@media(max-width: 1100px) { .hw-week { grid-template-columns: repeat(4, 1fr); } }
+@media(max-width: 700px) { .hw-week { grid-template-columns: repeat(2, 1fr); } .hw-day { min-height: 160px; } }
+
+/* ---- 3.1 各班作业跟踪（周作业模板模块） ---- */
+.weekly-table td { vertical-align: top; }
+.weekly-table .weekly-cell { cursor: pointer; max-width: 220px; min-width: 110px; white-space: normal; word-break: break-word; }
+.weekly-table .weekly-cell:hover { background: var(--brand-soft-strong); }
+.weekly-table td:first-child { min-width: 110px; }
+.weekly-week-select { min-width: 110px; font-size: 19px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.weekly-week-select:focus { outline: 2px solid var(--brand-line-strong); outline-offset: 1px; }
+
+/* ---- 4. 其他重构细节 ---- */
+/* 个人事务日历条目 */
+.cal-event.c-personal { background: rgba(120,151,131,.18); color: #234a44; }
+[data-theme="dark"] .cal-event.c-personal { color: #A9C8F2; }
+[data-theme="badge"] .cal-event.c-personal { color: #7A222E; }
+
+/* 成绩表：只读与编辑态视觉区分 */
+.score-cell { min-width: 60px; text-align: center; }
+.score-cell[contenteditable="false"], .score-cell:not([contenteditable]) { cursor: default; }
+.score-cell[contenteditable="true"] { background: var(--brand-soft); outline: 1px dashed var(--brand-line-strong); outline-offset: -3px; }
+
+/* 积分表头排序 */
+.psort-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.psort-th:hover { color: var(--brand-700); }
+
+/* 编辑表单弹窗里的 textarea/input 统一高度 */
+#modalRoot textarea, .form-grid textarea { min-height: 44px; font-size: 19px; }
+
+/* ---- 5. 表格操作列：多个按钮间距与对齐（编辑/删除/销假等） ---- */
+/* 文字按钮默认 padding 只有 5px，多个相邻时挤在一起；相邻按钮统一留出间距 */
+.data-table td .button + .button, .mini-list li > span .button + .button { margin-left: 8px; }
+/* 含按钮的单元格保持单行（:has 为渐进增强，不支持时仅少间距效果） */
+.data-table td:has(.button) { white-space: nowrap; }
+/* 可编辑表格操作列（学生档案/积分等）：按钮组不换行且间距均匀 */
+.editable-actions { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.editable-actions .button + .button { margin-left: 0; }
+/* 班级管理等弹窗行内按钮（改名/删除 等） */
+.task-row > span .button + .button { margin-left: 10px; }
+
+/* ---- 5.1 操作列按钮：带外框的小号按钮（替代纯文字链接） ---- */
+/* 外框用 currentColor 自动跟随语义色：默认=品牌色、danger=红、ok=绿 */
+.data-table td .button.text,
+.editable-actions .button.text,
+.task-row > span .button.text,
+.mini-list li > span .button.text {
+  border: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--brand-700);
+  padding: 3px 12px;
+  min-height: 27px;
+  height: auto;
+  line-height: 1.5;
+  white-space: nowrap;
+  transition: background .15s, color .15s, box-shadow .15s;
+}
+.data-table td .button.text:hover,
+.editable-actions .button.text:hover,
+.task-row > span .button.text:hover,
+.mini-list li > span .button.text:hover {
+  background: var(--brand-700);
+  color: var(--ink-inverse);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+}
+/* 危险操作（删除等）：红框 → 悬浮红底白字 */
+.data-table td .button.text.danger-text,
+.editable-actions .button.text.danger-text,
+.task-row > span .button.text.danger-text,
+.mini-list li > span .button.text.danger-text {
+  color: var(--danger);
+  border-color: currentColor;
+}
+.data-table td .button.text.danger-text:hover,
+.editable-actions .button.text.danger-text:hover,
+.task-row > span .button.text.danger-text:hover,
+.mini-list li > span .button.text.danger-text:hover {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(180, 40, 40, .25);
+}
+/* 正向操作（加分等）：绿框 → 悬浮绿底白字 */
+.data-table td .button.text.ok-text,
+.editable-actions .button.text.ok-text,
+.task-row > span .button.text.ok-text,
+.mini-list li > span .button.text.ok-text {
+  color: var(--ok);
+  border-color: currentColor;
+}
+.data-table td .button.text.ok-text:hover,
+.editable-actions .button.text.ok-text:hover,
+.task-row > span .button.text.ok-text:hover,
+.mini-list li > span .button.text.ok-text:hover {
+  background: var(--ok);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(40, 130, 70, .25);
+}
+
+/* 移动端：操作列按钮允许换行，避免溢出 */
+@media(max-width: 700px) {
+  .data-table td:has(.button) { white-space: normal; }
+  .data-table td .button + .button { margin-left: 6px; }
+  .editable-actions { flex-wrap: wrap; gap: 4px 8px; }
+  .data-table td .button.text,
+  .editable-actions .button.text,
+  .task-row > span .button.text,
+  .mini-list li > span .button.text { padding: 3px 10px; min-height: 26px; }
+}
+
+/* ---- 6. 侧边栏模块拖拽排序（Apple 风格） ---- */
+.sidebar-item {
+  transition: background .2s, color .2s, transform 240ms cubic-bezier(.22, .8, .26, 1);
+  will-change: transform;
+}
+/* 拖动中的被拖项：浮起 + 缩放 + 阴影，光标抓取 */
+.sidebar-item.sort-dragging {
+  position: relative;
+  z-index: 30;
+  transform: scale(1.035);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--brand-line-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .18), 0 2px 6px rgba(0, 0, 0, .12);
+  cursor: grabbing;
+  opacity: .96;
+  transition: box-shadow .18s ease, background .18s ease;
+}
+.sidebar-item.sort-dragging .sidebar-icon {
+  background: var(--brand-700);
+  color: var(--ink-inverse);
+  border-color: var(--brand-700);
+}
+/* 拖拽期间：其他项与整体禁止文本选中/默认光标 */
+body.wb-sorting { user-select: none; }
+body.wb-sorting .sidebar-item { cursor: grabbing; }
+body.wb-sorting .sidebar-item:not(.sort-dragging) { pointer-events: none; }
+/* 拖拽提示（title 已在按钮上） */
+.sidebar-item[data-module] { touch-action: pan-y; }
+
+/* ---- 6.1 侧边栏简约化：去掉图标，模块文本加粗 ---- */
+/* 图标已从 DOM 移除；文本直接加粗 */
+.sidebar-item { font-weight: 700; letter-spacing: .02em; }
+.sidebar-item.active { font-weight: 800; }
+/* 窄屏（≤1279px）原规则会隐藏非图标文字 → 图标已删，必须显示文字，否则侧边栏空白 */
+@media(max-width: 1279px) {
+  .sidebar-item span:not(.sidebar-icon) { display: block; }
+  .sidebar-item { justify-content: flex-start; padding: 9px 14px; }
+}
+/* 移动端抽屉保持正常文字展示 */
+@media(max-width: 767px) {
+  .sidebar-item span:not(.sidebar-icon) { display: block; }
+}
+
+/* ---- 7. 班级事务 · 马卡龙色系（8 色自定义） ---- */
+/* 马卡龙色事件块：浅底深字（内联 style 覆盖背景/文字色，此规则兜底选中态等） */
+.cal-event.c-mac1, .cal-event.c-mac2, .cal-event.c-mac3, .cal-event.c-mac4,
+.cal-event.c-mac5, .cal-event.c-mac6, .cal-event.c-mac7, .cal-event.c-mac8 {
+  border: 1px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .04);
+}
+/* 颜色选择器：8 个纯色圆块，点击单选（无文字标签） */
+.macaron-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+.macaron-swatch {
+  width: 34px; height: 34px;
+  border: 2px solid transparent; border-radius: 50%;
+  background: var(--swatch, #eee);
+  padding: 0;
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.macaron-swatch:hover { transform: translateY(-1px) scale(1.06); box-shadow: 0 2px 6px rgba(0, 0, 0, .16); }
+.macaron-swatch.selected {
+  border-color: var(--swatch-fg, #333);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--swatch-fg, #333), 0 2px 6px rgba(0, 0, 0, .16);
+}
+/* 当日事务列表：颜色点 + 主内容 + 操作 */
+.affair-mini-list li { align-items: flex-start; gap: 10px; padding: 8px 2px; }
+.affair-item { position: relative; }
+.affair-dot {
+  flex: 0 0 auto; width: 12px; height: 12px; margin-top: 6px;
+  border-radius: 50%; border: 2px solid transparent; display: inline-block;
+}
+.affair-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.affair-main strong { font-size: 19px; }
+.affair-main .status-badge { align-self: flex-start; }
+.affair-ops { flex: 0 0 auto; white-space: nowrap; }
+
+/* ---- 8. status-badge 自适应高度：修复 19px 字号下文字溢出固定 22px 外框 ---- */
+/* premium-minimal 定义 height:22px;line-height:22px，19px 字体实际行高约 26px，
+ * 导致所有表格（考勤/班会/家长会/个人记录/当日事务等）的徽标文字超出圆角框。
+ * 改为高度自适应：移除固定行高，用上下 padding 撑开，任何字号都不再裁剪。
+ * 注意：不覆盖 .status-badge.ok/.warn/.danger/.info 的颜色变体（保留语义色）。 */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  height: auto;
+  min-height: 26px;
+  padding: 2px 12px;
+  line-height: 1.4;
+  font-size: 19px;
+  white-space: nowrap;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+/* 小尺寸场景（表头/紧凑行）保持紧凑但不裁剪 */
+.status-badge.small, .data-table th .status-badge {
+  min-height: 22px;
+  padding: 1px 8px;
+  font-size: 15px;
+}
+/* 同系列圆角标签：member-chip / local-chip 字号与全局 19px 一致（padding 撑开，天然不裁剪） */
+.member-chip, .local-chip { font-size: 19px; padding: 4px 12px; }
+
+/* ---- 9. 单班级化：顶栏固定班级标签（替代原下拉切换） ---- */
+.class-fixed-label {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 700;
+  background: var(--surface);
+  white-space: nowrap;
+}
+/* 移动端紧凑显示 */
+@media(max-width: 767px) {
+  .class-fixed-label { font-size: 15px; padding: 0 8px; height: 28px; }
+}
+
+/* ---- 9.1 个人信息可编辑卡片 ---- */
+.profile-editable { cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
+.profile-editable:hover { border-color: var(--brand-500); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.profile-editable .stat-sub { color: var(--brand-700); }
+
+/* ---- 9.2 首页 Hero 精简：去掉标题，任务提醒扩大 + 本周课时预览 ---- */
+.campus-hero-copy { justify-content: center; }
+.campus-hero-copy .eyebrow, .campus-hero-copy h2 { display: none; }
+/* 加宽 hero 内容区，避免任务列表横向溢出 */
+.campus-hero-copy { width: min(680px, 76%); padding: 20px 30px; }
+/* 任务列表：禁止横向溢出；标题可收缩省略，截止时间不换行 */
+.hero-tasks-list { overflow-x: hidden; }
+.hero-tasks-list li { min-width: 0; }
+.hero-tasks-list .hero-task-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hero-task-due { flex: none; }
+/* 隐式滚动条：平时隐藏，鼠标悬停时显示细滚动条（不影响布局） */
+.hero-tasks-list {
+  max-height: 264px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  padding-right: 6px;
+}
+.hero-tasks-list::-webkit-scrollbar { width: 6px; }
+.hero-tasks-list::-webkit-scrollbar-track { background: transparent; }
+.hero-tasks-list::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.hero-tasks-list:hover { scrollbar-color: rgba(121, 240, 167, .5) transparent; }
+.hero-tasks-list:hover::-webkit-scrollbar-thumb { background: rgba(121, 240, 167, .5); }
+.hero-tasks-list::-webkit-scrollbar-thumb:hover { background: rgba(121, 240, 167, .85); }
+.hero-tasks-list li { font-size: 19px; line-height: 1.6; }
+/* 本周课时预览卡（hero 下方独立 section）：按班级分卡 */
+.hero-lesson-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.hero-lesson-card {
+  border: 1px solid var(--brand-line-strong);
+  border-radius: 10px;
+  background: var(--brand-soft);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.hero-lesson-card:hover { border-color: var(--brand-500); background: var(--brand-soft-strong); box-shadow: 0 3px 10px rgba(0,0,0,.06); }
+.hero-lesson-head { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+.hero-lesson-head .hero-tasks-count { font-size: 19px; background: var(--brand-soft-strong); color: var(--brand-700); border-radius: 12px; padding: 1px 12px; font-weight: 600; }
+.hero-lesson-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.hero-lesson-list::-webkit-scrollbar { width: 6px; }
+.hero-lesson-list::-webkit-scrollbar-track { background: transparent; }
+.hero-lesson-list::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.hero-lesson-list:hover { scrollbar-color: rgba(121, 240, 167, .5) transparent; }
+.hero-lesson-list:hover::-webkit-scrollbar-thumb { background: rgba(121, 240, 167, .5); }
+.hero-lesson-manual { border-style: dashed; }
+.hero-lesson-list li { display: flex; align-items: center; gap: 10px; font-size: 19px; line-height: 1.6; }
+.hero-lesson-day { font-weight: 600; color: var(--ink); }
+.hero-lesson-cls { font-weight: 700; color: var(--ink); }
+.hero-lesson-period { color: var(--ink-3); font-size: 17px; }
+.hero-lesson-state { margin-left: auto; flex: none; font-size: 17px; border-radius: 99px; padding: 1px 12px; }
+.hero-lesson-state.done { color: var(--ok); background: var(--ok-soft); }
+.hero-lesson-state.todo { color: var(--warn); background: var(--warn-soft); }
+.hero-lesson-empty { border-style: dashed; }
+.hero-lesson-note { font-size: 19px; color: var(--ink-2); }
+@media(max-width: 767px) {
+  .campus-hero-copy { width: 100%; padding: 16px 18px; }
+  .hero-tasks-list { max-height: 220px; }
+}
+
+/* ---- 10. 课时管理：今日卡片 + 四周计划 + 课表网格 ---- */
+/* 今日上课卡片 */
+.lesson-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.lesson-card {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  padding: 12px 14px; cursor: pointer; text-align: left;
+  transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.lesson-card:hover { transform: translateY(-2px); border-color: var(--brand-500); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
+.lesson-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.lesson-card-head strong { font-size: 19px; }
+.lesson-period { flex: none; font-size: 15px; color: var(--ink-3); border: 1px solid var(--border-strong); border-radius: 99px; padding: 1px 10px; }
+.lesson-card-body .lesson-line { font-size: 19px; color: var(--ink); line-height: 1.5; }
+.lesson-card-body .lesson-hw { color: var(--brand-700); margin-top: 4px; font-size: 19px; }
+.lesson-card.c-mac1, .lesson-card.c-mac2, .lesson-card.c-mac3, .lesson-card.c-mac4,
+.lesson-card.c-mac5, .lesson-card.c-mac6, .lesson-card.c-mac7, .lesson-card.c-mac8 { background: var(--swatch, var(--surface)); border-color: transparent; }
+.lesson-card.c-mac1 .lesson-card-body .lesson-line,
+.lesson-card.c-mac2 .lesson-card-body .lesson-line,
+.lesson-card.c-mac3 .lesson-card-body .lesson-line,
+.lesson-card.c-mac4 .lesson-card-body .lesson-line,
+.lesson-card.c-mac5 .lesson-card-body .lesson-line,
+.lesson-card.c-mac6 .lesson-card-body .lesson-line,
+.lesson-card.c-mac7 .lesson-card-body .lesson-line,
+.lesson-card.c-mac8 .lesson-card-body .lesson-line { color: var(--swatch-fg, var(--ink)); }
+.lesson-card.c-mac1 .lesson-card-head strong,
+.lesson-card.c-mac2 .lesson-card-head strong,
+.lesson-card.c-mac3 .lesson-card-head strong,
+.lesson-card.c-mac4 .lesson-card-head strong,
+.lesson-card.c-mac5 .lesson-card-head strong,
+.lesson-card.c-mac6 .lesson-card-head strong,
+.lesson-card.c-mac7 .lesson-card-head strong,
+.lesson-card.c-mac8 .lesson-card-head strong { color: var(--swatch-fg, var(--ink)); }
+/* 四周计划：excel 布局矩阵——横轴=日期（周一~周日），纵轴=班级（每班一行） */
+.lesson-week-block { margin-bottom: 18px; }
+.lesson-week-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  font-size: 19px; font-weight: 700; margin: 0 2px 10px;
+}
+.lesson-week-stat {
+  font-size: 17px; font-weight: 500; color: var(--brand-700);
+  background: var(--brand-soft); border-radius: 99px; padding: 2px 12px;
+}
+.ls-matrix { display: grid; grid-template-columns: 88px repeat(7, minmax(96px, 1fr)); min-width: 760px; }
+.ls-matrix-wrap { overflow-x: auto; }
+/* 行容器不参与 grid 布局（否则整行被塞进 1 列导致错位） */
+.ls-mx-row { display: contents; }
+.ls-mx-cls-head, .ls-mx-cls {
+  position: sticky; left: 0; z-index: 2;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center; padding: 8px 6px;
+}
+.ls-mx-cls-head { font-weight: 700; color: var(--ink-2); border-right: 1px solid var(--border); background: var(--table-head); border-radius: 8px 0 0 0; }
+.ls-mx-cls { border-right: 1px solid var(--border); font-weight: 700; font-size: 17px; color: var(--brand-700); text-align: center; word-break: break-all; }
+.ls-mx-head {
+  border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: center;
+  font-size: 15px; color: var(--ink-2); background: var(--table-head);
+  display: flex; flex-direction: column; gap: 1px; align-items: center; justify-content: center;
+}
+.ls-mx-head.today { background: var(--brand-050); }
+.ls-mx-head-date { font-size: 17px; font-weight: 700; color: var(--ink); }
+.ls-mx-today { font-size: 13px; color: var(--brand-700); font-weight: 700; }
+/* 单元格：可点击（含空格） */
+.ls-cell {
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  min-height: 72px; padding: 6px; cursor: pointer; text-align: left;
+  display: flex; flex-direction: column; gap: 3px;
+  background: var(--surface);
+  transition: background .12s ease, box-shadow .12s ease;
+}
+.ls-cell:hover { background: var(--brand-soft-strong); box-shadow: inset 0 0 0 1px var(--brand-500); }
+.ls-cell.today { background: var(--brand-050); box-shadow: inset 0 0 0 1px var(--brand-500); }
+.ls-cell.c-mac1, .ls-cell.c-mac2, .ls-cell.c-mac3, .ls-cell.c-mac4,
+.ls-cell.c-mac5, .ls-cell.c-mac6, .ls-cell.c-mac7, .ls-cell.c-mac8 { background: var(--swatch, var(--brand-soft)); }
+.ls-cell-head { display: flex; align-items: center; gap: 4px; }
+.ls-cell-period { font-size: 14px; color: var(--ink-3); border: 1px solid var(--border-strong); border-radius: 99px; padding: 0 7px; line-height: 18px; flex: none; }
+.ls-cell-period.ls-manual { border-style: dashed; }
+.ls-cell-state { margin-left: auto; flex: none; font-size: 13px; border-radius: 99px; padding: 0 7px; line-height: 18px; font-weight: 600; }
+.ls-cell-state.done { color: var(--ok); background: var(--ok-soft); }
+.ls-cell-state.todo { color: var(--warn); background: var(--warn-soft); }
+.ls-cell-state.none { color: var(--ink-3); background: var(--ink-soft); }
+.ls-cell-text { font-size: 15px; line-height: 1.35; color: var(--ink); word-break: break-all; }
+.ls-cell.c-mac1 .ls-cell-text, .ls-cell.c-mac2 .ls-cell-text,
+.ls-cell.c-mac3 .ls-cell-text, .ls-cell.c-mac4 .ls-cell-text,
+.ls-cell.c-mac5 .ls-cell-text, .ls-cell.c-mac6 .ls-cell-text,
+.ls-cell.c-mac7 .ls-cell-text, .ls-cell.c-mac8 .ls-cell-text { color: var(--swatch-fg, var(--ink)); }
+.ls-cell-hw { font-size: 14px; color: var(--warn); line-height: 1.3; word-break: break-all; }
+.ls-cell-plus { font-size: 15px; color: var(--ink-3); align-self: center; margin: auto; }
+.ls-empty { border-style: dashed; border-color: var(--border-strong); }
+
+/* 班级信息卡（班主任 / 学科 / 政治课代表） */
+.cls-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.cls-info-card {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  padding: 12px 14px; cursor: pointer; text-align: left;
+  transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.cls-info-card:hover { transform: translateY(-2px); border-color: var(--brand-500); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+.cls-info-name { font-size: 19px; font-weight: 700; color: var(--brand-700); margin-bottom: 8px; }
+.cls-info-row { display: flex; align-items: baseline; gap: 8px; font-size: 19px; line-height: 1.55; }
+.cls-info-label { flex: none; font-size: 15px; color: var(--ink-3); min-width: 74px; }
+.lesson-period-manual { border-style: dashed; }
+/* 课表网格 */
+.schedule-grid { display: grid; grid-template-columns: 64px repeat(7, 1fr); gap: 4px; }
+.sch-head { font-size: 15px; font-weight: 700; text-align: center; padding: 6px 0; color: var(--ink-2); }
+.sch-period { display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--ink-3); }
+.sch-cell { min-height: 52px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+.sch-cell:hover { border-color: var(--brand-500); background: var(--brand-soft-strong); }
+.sch-cls { font-size: 17px; font-weight: 700; color: var(--brand-700); padding: 2px 6px; text-align: center; word-break: break-all; }
+.sch-empty { font-size: 19px; color: var(--ink-3); }
+.sch-options { display: flex; flex-wrap: wrap; gap: 8px; }
+@media(max-width: 900px) {
+  .schedule-grid { grid-template-columns: 52px repeat(7, minmax(46px, 1fr)); overflow-x: auto; }
+}
