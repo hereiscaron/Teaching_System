@@ -1,3 +1,10 @@
+# 真实环境数据（学生/班级/成绩等）——绝不提交
+data/
+_import_sources/
+app/data_*/
+app/data_test_agent/
+app/data_test_agent2/
+
 # 运行时文件
 **/server.log
 **/server.pid
