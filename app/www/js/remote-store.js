@@ -94,8 +94,11 @@
     }
     function pushUndo(fk, before) {
       var last = undoStack[undoStack.length - 1];
-      // 2.5 秒内同一键的连续写入（如防抖自动保存）合并为一次操作
-      if (last && last.fk === fk && (Date.now() - last.at) < 2500) { last.before = before; last.at = Date.now(); return; }
+      var sameKey = last && last.fk === fk && (Date.now() - last.at) < 1500;
+      var sameState = sameKey && JSON.stringify(last.before) === JSON.stringify(before);
+      // 仅合并"重复写入同一状态"的防抖自动保存（值没变 = 同一次操作的重复落盘），
+      // 只更新时间戳、保留最早快照；值变了说明是新的独立操作（如再次删除/编辑），单独入栈。
+      if (sameState) { last.at = Date.now(); return; }
       undoStack.push({ fk: fk, before: before, at: Date.now() });
       if (undoStack.length > MAX_UNDO) undoStack.shift();
       redoStack = [];
@@ -106,10 +109,14 @@
       var ref = stack[stack.length - 1];
       if (!ref) return batch;
       var base = ref.at;
+      var seen = {}; // fk -> 批次内该键第一条记录的 before(JSON)，用于识别独立操作边界
       while (stack.length) {
         var r = stack[stack.length - 1];
-        if (batch.length && Math.abs(r.at - base) > 2500) break;
+        if (batch.length && Math.abs(r.at - base) > 1500) break;
+        // 同一键出现两次且快照不同 = 两次独立操作（如连续删除两条），停止批量，留给下次撤销
+        if (seen[r.fk] !== undefined && seen[r.fk] !== JSON.stringify(r.before)) break;
         batch.push(stack.pop());
+        if (seen[r.fk] === undefined) seen[r.fk] = JSON.stringify(r.before);
       }
       return batch;
     }

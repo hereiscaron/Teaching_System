@@ -76,6 +76,59 @@
 .dorm-members { display: flex; flex-wrap: wrap; gap: 6px; }
 .dorm-members i { font-style: normal; font-size: 19px; padding: 2px 10px; background: var(--brand-soft-strong); border-radius: 99px; color: var(--brand-700); }
 .dorm-score { font-size: 19px; color: var(--ink-2); }
+/* 宿舍按性别着色：男生宿舍浅蓝、女生宿舍浅粉 */
+.dorm-block.dorm-male { background: #e3effb; border-color: #bcd7f0; }
+.dorm-block.dorm-male:hover { border-color: #8db8e6; }
+.dorm-block.dorm-male .dorm-room { color: #1d5f9e; }
+.dorm-block.dorm-male .dorm-members i { background: #d2e6fa; color: #2a6cb5; }
+.dorm-block.dorm-female { background: #fde9ef; border-color: #f4c5d4; }
+.dorm-block.dorm-female:hover { border-color: #e89ab5; }
+.dorm-block.dorm-female .dorm-room { color: #b04a6e; }
+.dorm-block.dorm-female .dorm-members i { background: #fad9e4; color: #c25a80; }
+
+/* ---- 2.5 座位表（4 大组横向排布 × 每组 7 排 × 2 列同桌） ---- */
+.seat-board { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 10px 28px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow-x: auto; }
+.seat-stage { flex-basis: 100%; text-align: center; font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--ink-3); letter-spacing: .5em; padding: 8px 0 2px; }
+.seat-group { display: flex; flex-direction: column; gap: 4px; }
+.seat-group-label { font-size: 16px; font-weight: 700; color: var(--ink-2); text-align: center; padding: 2px 0; }
+.seat-row { display: flex; justify-content: center; gap: 8px; }
+.seat { position: relative; display: flex; align-items: center; justify-content: center; min-width: 108px; height: 44px; padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: grab; user-select: none; transition: border-color .12s, box-shadow .12s, transform .12s, background .12s; }
+.seat:hover { border-color: var(--brand-500); box-shadow: var(--shadow-pop); }
+.seat:active { cursor: grabbing; }
+.seat .seat-name { font-size: 19px; color: var(--ink-1); }
+.seat .seat-gender { position: absolute; top: 3px; right: 6px; font-size: 12px; color: var(--ink-3); }
+.seat-empty { background: var(--brand-050); border-style: dashed; cursor: default; }
+.seat-empty::after { content: '空'; font-size: 15px; color: var(--ink-3); }
+.seat-empty:hover { border-color: var(--border); box-shadow: none; }
+.seat.selected { outline: 2px solid var(--brand-600); outline-offset: 1px; transform: scale(1.04); }
+.seat.dragging { opacity: .45; transform: scale(.96); }
+.seat.drop-target { border-color: var(--brand-600); box-shadow: 0 0 0 3px var(--brand-soft-strong); transform: scale(1.05); }
+.seat.seat-male { background: #e3effb; border-color: #bcd7f0; }
+.seat.seat-male .seat-name { color: #1d5f9e; }
+.seat.seat-female { background: #fde9ef; border-color: #f4c5d4; }
+.seat.seat-female .seat-name { color: #b04a6e; }
+@media print {
+  .seat-board { border: none; }
+  .seat { break-inside: avoid; }
+}
+
+/* ---- 2.6 值日表卡片式展示（每周 / 单周 / 双周） ---- */
+.clean-group { margin-bottom: 18px; }
+.clean-group-title { font-size: 19px; font-weight: 700; color: var(--brand-900); margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; }
+.clean-group-title small { font-weight: 400; color: var(--ink-3); font-size: 15px; }
+.clean-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.clean-card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; transition: border-color .15s, box-shadow .15s; }
+.clean-card:hover { border-color: var(--brand-500); box-shadow: var(--shadow-pop); }
+.clean-card.today { border-color: var(--brand-600); box-shadow: 0 0 0 2px var(--brand-soft-strong); }
+.clean-card-head { display: flex; align-items: center; gap: 8px; }
+.clean-card-week { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--brand-900); }
+.clean-card-task { font-size: 19px; color: var(--ink-2); }
+.clean-card-members { display: flex; flex-wrap: wrap; gap: 6px; }
+.clean-card-members i { font-style: normal; font-size: 18px; padding: 2px 10px; background: var(--brand-soft-strong); border-radius: 99px; color: var(--brand-700); }
+/* 值日成员按性别着色：男生浅蓝、女生浅粉（与座位表一致） */
+.clean-card-members i.clean-male { background: #d2e6fa; color: #2a6cb5; }
+.clean-card-members i.clean-female { background: #fad9e4; color: #c25a80; }
+.clean-card-actions { display: flex; gap: 8px; margin-top: 2px; }
 
 /* ---- 3. 作业与自习：周视图日历 ---- */
 .hw-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }

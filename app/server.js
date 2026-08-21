@@ -17,7 +17,7 @@ const store = require('./lib/store.js');
 const weeklyParse = require('./lib/weekly-parse.js');
 
 const ROOT = __dirname;
-const VERSION = '1.0.0';
+const VERSION = '1.2.0';
 const CFG = store.loadConfig(ROOT);
 const MAX_BODY = 200 * 1024 * 1024; // 200MB（含附件导入）
 
@@ -281,7 +281,8 @@ const attMatch = p.match(/^\/api\/attachments\/([^/]+)$/);
   const file = path.resolve(CFG.APP, rel);
   if (file !== CFG.APP && !file.startsWith(CFG.APP + path.sep)) { sendJSON(res, 403, { ok: false, error: '禁止访问' }); return; }
   if (fs.existsSync(file) && fs.statSync(file).isFile()) {
-    res.writeHead(200, { 'Content-Type': mimeFor(file), 'Cache-Control': 'no-cache' });
+    // no-store 彻底禁用缓存：每次刷新都拿到最新代码（避免旧版 JS 导致交互异常）
+    res.writeHead(200, { 'Content-Type': mimeFor(file), 'Cache-Control': 'no-store' });
     fs.createReadStream(file).pipe(res);
     return;
   }

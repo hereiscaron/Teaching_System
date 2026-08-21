@@ -1,0 +1,117 @@
+/* ============================================================
+ * sidebar-fix.css · 侧边栏固定修复（v1.0820）
+ * 最后加载，解决：滚动页面时侧边栏跟着滚走、换板块要滚回顶部。
+ *
+ * 目标布局：
+ *   - 整个页面正常滚动（footer 状态栏在页面最底部，滚到底才见）
+ *   - 仅侧边栏 position:fixed 钉在屏幕左侧，永不消失
+ *   - 主内容在文档流中，grid 第 2 列（第 1 列 240px 是 sidebar 占位）
+ * ============================================================ */
+
+/* 1. 应用外壳：允许页面自然滚动（不做固定高度/隐藏滚动） */
+.app {
+  min-height: 100vh;
+}
+
+/* 2. 工作区：自然高度，允许被内容撑高（body 滚动） */
+.workspace {
+  min-height: 0;
+  overflow: visible;
+}
+
+/* 3. 侧边栏：fixed 钉在屏幕左侧，永远可见，内容可随滚轮滚动 */
+.sidebar {
+  position: fixed !important;
+  top: 52px !important;
+  bottom: 28px !important;
+  left: 0 !important;
+  width: 240px !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  z-index: 12 !important;
+  background: var(--surface) !important;
+}
+
+/* 4. 主内容：grid 第 2 列（第 1 列 240px 留给 fixed 侧边栏占位）
+ *    保持文档流内，跟随页面滚动 */
+.workspace .main-content {
+  grid-column: 2 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  min-width: 0 !important;
+  width: auto !important;
+  overflow: visible !important;
+}
+
+/* 5. 窄屏折叠为图标栏（grid 第 1 列对应 56px） */
+@media (max-width: 1279px) {
+  .sidebar { width: 56px !important; }
+}
+
+/* 6. 移动端保持抽屉原样 */
+@media (max-width: 767px) {
+  .sidebar {
+    top: 48px !important;
+    bottom: 24px !important;
+    width: 230px !important;
+    transform: translateX(-100%) !important;
+    transition: transform .18s ease !important;
+    z-index: 15 !important;
+  }
+  .sidebar.open { transform: translateX(0) !important; }
+}
+
+/* 7. 隐藏底部状态栏（footer）：不再展示，界面更简洁 */
+.statusbar,
+footer.statusbar {
+  display: none !important;
+}
+/* footer 隐藏后，侧边栏延伸到屏幕最底部 */
+.sidebar {
+  bottom: 0 !important;
+}
+
+/* 8. 侧边栏滚动条隐式化：不显示滚动条，但滚轮/触摸仍可滚动 */
+.sidebar::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+.sidebar {
+  scrollbar-width: none !important;  /* Firefox */
+  -ms-overflow-style: none !important; /* IE/Edge 旧版 */
+}
+
+/* 9. 配色微调：森绿色（就一点点）——覆盖 premium-minimal.css 的 :root 重定义 */
+:root {
+  --brand-900:#152B1D !important;
+  --brand-700:#1F6C3F !important;
+  --brand-500:#3F9F63 !important;
+  --brand-050:#E3F1E5 !important;
+  --brand-soft:rgba(63,140,90,.08) !important;
+  --brand-soft-strong:rgba(63,140,90,.14) !important;
+  --brand-soft-hover:rgba(63,140,90,.26) !important;
+}
+
+/* 10. 快速待办 · 截止日期快捷标签 */
+.quick-due-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+.quick-due {
+  padding: 4px 10px !important;
+  min-height: 28px !important;
+  font-size: 12px !important;
+  border-radius: 99px !important;
+}
+.quick-due.active {
+  background: var(--brand-700) !important;
+  border-color: var(--brand-700) !important;
+  color: var(--ink-inverse) !important;
+}

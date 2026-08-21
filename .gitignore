@@ -1,0 +1,6 @@
+# 运行时文件
+**/server.log
+**/server.pid
+
+# 备份/临时文件
+*.bak

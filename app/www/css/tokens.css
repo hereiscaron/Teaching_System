@@ -1,16 +1,25 @@
 :root {
-  --brand-900:#17291F; --brand-700:#1D6B4A; --brand-500:#3FA774; --brand-050:#E4F0E6;
-  --canvas:#EEF2E9; --surface:#F9FAF4; --table-head:#EDF2EB; --chrome:#DDE5DC; --border:#C9D4CA; --border-strong:#98A89B;
-  --ink:#17221B; --ink-2:#4B5C50; --ink-3:#7C8B80; --ok:#2E8B57; --warn:#A46D29;
-  --danger:#B4463D; --info:#35756B; --focus:#3FA774; --ok-soft:rgba(46,139,87,.10); --warn-soft:rgba(164,109,41,.10); --danger-soft:rgba(180,70,61,.10); --info-soft:rgba(53,117,107,.10); --ink-soft:rgba(23,34,27,.08);
-  --graphite:#17211D; --graphite-2:#25332C; --neon:#79F0A7; --sage:#DDE8D9; --ink-inverse:#F2F6ED;
+  --brand-900:#142A1C; --brand-700:#1E6B3E; --brand-500:#3E9E62; --brand-050:#E2F0E4;
+  --canvas:#EDF1E8; --surface:#F9FAF4; --table-head:#EBF1EA; --chrome:#DCE5DA; --border:#C8D4C8; --border-strong:#96A896;
+  --ink:#16211A; --ink-2:#4A5C4E; --ink-3:#7B8B7E; --ok:#2E8B4E; --warn:#A46D29;
+  --danger:#B4463D; --info:#35756B; --focus:#3E9E62; --ok-soft:rgba(46,139,78,.10); --warn-soft:rgba(164,109,41,.10); --danger-soft:rgba(180,70,61,.10); --info-soft:rgba(53,117,107,.10); --ink-soft:rgba(22,33,26,.08);
+  --graphite:#16201B; --graphite-2:#24312A; --neon:#79F0A7; --sage:#DCE8D7; --ink-inverse:#F2F6ED;
   /* 语义色（供组件引用，随主题切换） */
-  --brand-soft:rgba(120,151,131,.08); --brand-soft-strong:rgba(120,151,131,.14); --brand-soft-hover:rgba(120,151,131,.26);
+  --brand-soft:rgba(62,130,88,.08); --brand-soft-strong:rgba(62,130,88,.14); --brand-soft-hover:rgba(62,130,88,.26);
   --brand-line:rgba(56,95,75,.28); --brand-line-strong:rgba(56,95,75,.4); --brand-line-soft:rgba(56,95,75,.14);
   --hero-tint-a:rgba(25,53,42,.94); --hero-tint-b:rgba(25,53,42,.66); --hero-tint-c:rgba(25,53,42,.06);
-  --font-body:"Songti SC","STSong","SimSun","Noto Serif SC","宋体",serif; --font-display:"Songti SC","STSong","SimSun","Noto Serif SC","宋体",serif; --font-mono:"Songti SC","STSong","SimSun","Noto Serif SC","宋体",serif;
+  --font-body:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Noto Sans SC","微软雅黑","Songti SC",sans-serif; --font-display:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Noto Sans SC","微软雅黑","Songti SC",sans-serif; --font-mono:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Noto Sans SC","微软雅黑",Consolas,monospace;
   --hero-image:linear-gradient(135deg,#24382d,#101914);
-  --radius:3px; --shadow-pop:0 2px 10px rgba(23,41,31,.16); --shadow-modal:0 12px 32px rgba(23,41,31,.28);
+  --radius:3px; --radius-lg:18px; --radius-md:14px; --radius-sm:10px; --radius-pill:999px;
+  --shadow-pop:0 2px 10px rgba(23,41,31,.16); --shadow-modal:0 12px 32px rgba(23,41,31,.28);
+  --shadow-card:0 1px 2px rgba(23,41,31,.05), 0 8px 24px rgba(23,41,31,.07);
+  --shadow-card-hover:0 2px 4px rgba(23,41,31,.06), 0 14px 34px rgba(23,41,31,.12);
+  --card-gap:16px;
+  /* Liquid Glass（液态玻璃）变量 */
+  --glass-blur:18px; --glass-sat:180%;
+  --glass-border:linear-gradient(135deg, rgba(255,255,255,.85), rgba(255,255,255,.18) 40%, rgba(255,255,255,.55));
+  --glass-highlight:inset 0 1px 0 rgba(255,255,255,.55);
+  --glass-shadow:0 1px 1px rgba(23,41,31,.04), 0 10px 30px rgba(23,41,31,.10), inset 0 0 0 .5px rgba(255,255,255,.25);
 }
 
 /* ============ 配色2（烟洲中学校徽：暗红 #7A222E + 纯白） ============

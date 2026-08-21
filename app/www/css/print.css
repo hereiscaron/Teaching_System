@@ -1,1 +1,23 @@
-@media print{.topbar,.sidebar,.statusbar,.head-actions,.toolbar,.detail-drawer{display:none!important}.app,.workspace{display:block}.main-content{padding:0}.section{border-color:#999;break-inside:avoid}.data-table-wrap{max-height:none;overflow:visible}.page-head{margin-bottom:8px}.print-only{display:block!important}}
+/* 通用打印：隐藏工作台框架，只留内容 */
+@media print{.topbar,.sidebar,.statusbar,.head-actions,.toolbar,.detail-drawer,.personal-records-panel{display:none!important}.app,.workspace{display:block}.main-content{padding:0}.section{border-color:#999;break-inside:avoid}.data-table-wrap{max-height:none;overflow:visible}.page-head{margin-bottom:8px}.print-only{display:block!important}}
+
+/* 座位表打印：只打印《座位表》标题 + 讲台 + 按位置分布的人名 */
+@media print{
+  body.seat-print .main-content > *:not(.seat-print-root){display:none!important}
+  body.seat-print .seat-print-root{display:block!important;padding:10mm}
+  body.seat-print .seat-print-root .page-head,
+  body.seat-print .seat-print-root .section > .section-title,
+  body.seat-print .seat-print-root .section > .section-body > .seat-board{display:block!important}
+  body.seat-print .seat-board{overflow:visible!important;border:none!important;background:#fff!important;padding:0!important}
+  body.seat-print .seat-board .seat{min-width:88px!important;height:34px!important;padding:0 8px!important;border:1px solid #666!important;background:#fff!important}
+  body.seat-print .seat-board .seat .seat-name{color:#000!important}
+  body.seat-print .seat-board .seat .seat-gender{display:none!important}
+  body.seat-print .seat-board .seat.seat-male{background:#fff!important;border:1px solid #666!important}
+  body.seat-print .seat-board .seat.seat-male .seat-name{color:#000!important}
+  body.seat-print .seat-board .seat.seat-female{background:#fff!important;border:1px solid #666!important}
+  body.seat-print .seat-board .seat.seat-female .seat-name{color:#000!important}
+  body.seat-print .seat-board .seat-empty{display:none!important}
+  body.seat-print .seat-stage{display:block!important;font-size:20px!important;color:#333!important}
+  body.seat-print .seat-group-label{display:block!important;font-size:15px!important;color:#333!important}
+  body.seat-print .seat-print-title{display:block!important;text-align:center;font-family:var(--font-display);font-size:28px;font-weight:700;letter-spacing:.35em;margin:0 0 8mm;color:#000}
+}

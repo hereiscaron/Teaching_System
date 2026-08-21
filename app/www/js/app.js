@@ -76,6 +76,12 @@
     TW.affairs = cd('affairs', TW.affairsSeed);
     TW.tasks = cd('tasks', TW.tasksSeed);
     TW.cleaning = cd('cleaning', TW.cleaningSeed);
+    // 座位表（可视化布局，非可编辑表格）：{ seats:[4组][7排][2列] 每座 {sid,name}|null, lastAction, undo }
+    TW.seating = cd('seating', null);
+    if (!TW.seating || !Array.isArray(TW.seating.seats) || TW.seating.seats.length !== 4) {
+      TW.seating = autoSeating(null);
+      cw('seating', TW.seating);
+    }
     // 分数管理：按班级存储；初始值不落盘，渲染时对名单内学生默认 100 分（未加减分不产生空记录）
     TW.points = cd('points', []);
     // 谈话记录：归总到学生档案，按班级存储 {name, sid, type, time, content, note, audioId}
@@ -319,7 +325,7 @@
     return TW.store.write('user_records', TW.userRecords);
   }
   /* 操作日志：各板块的写操作自动生成"本机个人记录"条目（同一板块 30 秒内合并为一条，避免刷屏） */
-  var MODULE_NAMES = { dashboard:'首页', affairs:'班级事务', students:'学生档案', attendance:'考勤管理', scores:'成绩分析', homework:'作业台账', meeting:'班会与德育', family:'家校沟通', dorm:'宿舍管理', quality:'综合素质', selection:'选科意向', cleaning:'值日表', points:'分数管理', alerts:'预警中心', personal:'个人事务' };
+  var MODULE_NAMES = { dashboard:'首页', affairs:'班级事务', students:'学生档案', seating:'座位表', attendance:'考勤管理', scores:'成绩分析', homework:'作业台账', meeting:'班会与德育', family:'家校沟通', dorm:'宿舍管理', quality:'综合素质', selection:'选科意向', cleaning:'值日表', points:'分数管理', alerts:'预警中心', personal:'个人事务' };
   function refreshRecordsPanel(){
     // 操作日志/个人记录变化后，局部重建页面底部的"本机个人记录"面板（不整体重渲染，避免打断输入）
     var root = TW.$('.local-records-panel');
@@ -397,14 +403,14 @@
   /* ================= 台账行查看/编辑/删除（通用：读业务键、可编辑、可删） ================= */
   /* 字段类型：text（默认） / date / textarea / select:选项A,选项B */
   var LIST_DEFS = {
-    meetings:      { title:'班会记录', rows: function(){ return TW.meetings; },      fields: [['日期','date','date'],['主题','topic','text'],['内容','content','textarea'],['状态','status','text']], save: function(r){ cw('meetings', r); } },
+    meetings:      { key:'meetings', title:'班会记录', rows: function(){ return TW.meetings; },      fields: [['日期','date','date'],['主题','topic','text'],['内容','content','textarea'],['状态','status','text']], save: function(r){ cw('meetings', r); } },
     meetingPlan:   { title:'班会计划', rows: function(){ return TW.meetingPlan; },   fields: [['日期','date','date'],['主题','topic','text'],['目标','goal','text']], save: function(r){ cw('meeting_plan', r); } },
     family:        { title:'沟通历史', rows: function(){ return TW.family; },        fields: [['日期','date','date'],['方式','type','select:家访,电话,微信,面谈'],['对象','target','text'],['内容','content','textarea'],['反馈','feedback','textarea']], save: function(r){ cw('family', r); } },
     parentMeetings:{ title:'家长会记录', rows: function(){ return TW.parentMeetings; }, fields: [['日期','date','date'],['主题','topic','text'],['出勤','attendance','text'],['内容','content','textarea'],['状态','status','text']], save: function(r){ cw('parent_meetings', r); } },
     familyPlan:    { title:'沟通计划', rows: function(){ return TW.familyPlan; },    fields: [['日期','date','date'],['对象','target','text'],['原因','reason','text']], save: function(r){ cw('family_plan', r); } },
     dormVisits:    { title:'探访记录', rows: function(){ return TW.dormVisits; },    fields: [['日期','date','date'],['宿舍','room','text'],['备注','note','textarea']], save: function(r){ cw('dorm_visits', r); } },
     quality:       { title:'综合素质评价', rows: function(){ return TW.quality; },   fields: [['姓名','name','text'],['道德','moral','select:优,良,中'],['学业','academic','select:优,良,中'],['健康','health','select:优,良,中'],['艺术','art','select:优,良,中'],['劳动','labor','select:优,良,中'],['评语','comment','textarea']], save: function(r){ cw('quality', r); } },
-    cleaning:      { title:'值日安排', rows: function(){ return TW.cleaning; },      fields: [['星期','week','select:周一,周二,周三,周四,周五,周六,周日'],['值日学生','members','text'],['值日内容','task','text']], save: function(r){ cw('cleaning', r); } }
+    cleaning:      { title:'值日安排', rows: function(){ return TW.cleaning; },      fields: [['星期','week','select:周一,周二,周三,周四,周五,周六,周日'],['轮换','weekType','select:每周,单周,双周'],['值日学生','members','text'],['值日内容','task','text']], save: function(r){ cw('cleaning', r); } }
   };
   function viewListRow(el){
     var def = LIST_DEFS[el.dataset.list];
@@ -415,7 +421,8 @@
       var v = row[f[1]] == null || row[f[1]] === '' ? '—' : String(row[f[1]]);
       return '<div class="stat-card"><div class="stat-label">' + f[0] + '</div><div class="stat-value" style="font-size:16px">' + TW.escape(v) + '</div></div>';
     }).join('') + '</div>';
-    TW.modal('查看详情 · ' + def.title, html);
+    var dlg = TW.modal('查看详情 · ' + def.title, html);
+    var me = dlg && dlg.root && dlg.root.querySelector('.modal'); if (me) me.classList.add('wide-modal');
   }
   function editListRow(el){
     var def = LIST_DEFS[el.dataset.list];
@@ -437,8 +444,11 @@
         control = '<input id="er_' + key + '" value="' + TW.escape(val) + '">';
       }
       return '<div class="field' + (type === 'textarea' ? ' full' : '') + '"><label>' + label + '</label>' + control + '</div>';
-    }).join('') + '</div>';
+    }).join('')
+      + (def.key === 'meetings' ? meetingAttachHtml(row) : '')
+      + '</div>';
     TW.modal('编辑 · ' + def.title, html, '<button class="button secondary" data-close>取消</button><button class="button" id="erSave">保存</button>');
+    if (def.key === 'meetings') bindMeetingAttach(row);
     TW.$('#erSave').onclick = function(){
       def.fields.forEach(function(f){
         var key = f[1], inp = TW.$('#er_' + key);
@@ -446,6 +456,52 @@
       });
       def.save(rows);
       TW.$('#modalRoot').innerHTML = ''; renderShell(); TW.toast('已保存修改');
+    };
+  }
+  /* 班会记录附件管理（编辑弹窗内）：显示已有附件（可下载/删除）+ 新增文件选择 */
+  function meetingAttachHtml(row){
+    var atts = row.attachments || [];
+    return '<div class="field full"><label>附件（PPT/教案/照片等，留档）</label>'
+      + '<div id="meetAttList" class="note" style="margin-bottom:6px">' + (atts.length ? atts.map(function(a, ai){ return '<span style="display:inline-block;margin-right:10px">📎 <a href="/api/attachments/' + TW.escape(a.id) + '" download style="text-decoration:underline">' + TW.escape(a.name) + '</a> <button type="button" class="button text danger-text" data-meet-att-del="' + ai + '">删除</button></span>'; }).join('') : '暂无附件') + '</div>'
+      + '<input id="meetAttFile" type="file" multiple accept=".ppt,.pptx,.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.mp4,.zip,.txt"><div id="meetAttPick" class="note"></div></div>';
+  }
+  function bindMeetingAttach(row){
+    row.attachments = row.attachments || [];
+    TW.$$('[data-meet-att-del]', TW.$('#modalRoot')).forEach(function(b){
+      b.onclick = function(){
+        var ai = Number(b.dataset.meetAttDel), att = row.attachments[ai];
+        if (!att) return;
+        if (!confirm('确认删除附件「' + att.name + '」吗？')) return;
+        TW.files.remove(att.id).then(function(){
+          row.attachments.splice(ai, 1);
+          TW.$('#meetAttList').outerHTML = '<div id="meetAttList" class="note" style="margin-bottom:6px">' + (row.attachments.length ? row.attachments.map(function(a, i2){ return '<span style="display:inline-block;margin-right:10px">📎 <a href="/api/attachments/' + TW.escape(a.id) + '" download style="text-decoration:underline">' + TW.escape(a.name) + '</a> <button type="button" class="button text danger-text" data-meet-att-del="' + i2 + '">删除</button></span>'; }).join('') : '暂无附件') + '</div>';
+          bindMeetingAttach(row);
+          cw('meetings', TW.meetings);
+          TW.toast('附件已删除');
+        }).catch(function(e){ TW.toast('删除失败：' + (e && e.message || e), 'danger'); });
+      };
+    });
+    var fileInput = TW.$('#meetAttFile'), picked = [];
+    fileInput.onchange = function(){
+      picked = Array.prototype.slice.call(fileInput.files || []);
+      TW.$('#meetAttPick').textContent = picked.length ? '待上传 ' + picked.length + ' 个：' + picked.map(function(f){ return f.name; }).join('、') : '';
+    };
+    var saveBtn = TW.$('#erSave');
+    var origClick = saveBtn.onclick;
+    saveBtn.onclick = function(){
+      if (!picked.length) { origClick(); return; }
+      var pending = picked.length, failed = false;
+      picked.forEach(function(file){
+        if (file.size > 70 * 1024 * 1024) { failed = true; pending--; if (!pending) afterUpload(); return; }
+        TW.files.put(file, { kind: 'meeting' }).then(function(info){
+          row.attachments.push({ id: info.id, name: file.name });
+          pending--; if (!pending) afterUpload();
+        }).catch(function(){ failed = true; pending--; if (!pending) afterUpload(); });
+      });
+      function afterUpload(){
+        if (failed) TW.toast('部分附件上传失败', 'danger');
+        origClick();
+      }
     };
   }
   function deleteListRow(el){
@@ -483,8 +539,8 @@
   function bindGlobal(){
     TW.$('#mobileMenu').onclick = function(){ TW.$('#sidebar').classList.toggle('open'); };
     TW.$('#lockButton').onclick = lockNow;
-    TW.$('#undoBtn').onclick = function(){ var r = TW.store.undo(); if (r.ok) { rebuildMirrors(); renderShell(); TW.toast('已撤回上一次操作'); } else { TW.toast('没有可撤回的操作'); } };
-    TW.$('#redoBtn').onclick = function(){ var r = TW.store.redo(); if (r.ok) { rebuildMirrors(); renderShell(); TW.toast('已回溯刚才的操作'); } else { TW.toast('没有可回溯的操作'); } };
+    TW.$('#undoBtn').onclick = function(){ var r = TW.store.undo(); if (r.ok) { hydrate(); rebuildMirrors(); renderShell(); TW.toast('已撤回上一次操作'); } else { TW.toast('没有可撤回的操作'); } };
+    TW.$('#redoBtn').onclick = function(){ var r = TW.store.redo(); if (r.ok) { hydrate(); rebuildMirrors(); renderShell(); TW.toast('已回溯刚才的操作'); } else { TW.toast('没有可回溯的操作'); } };
     TW.$('#notifyButton').onclick = function(){
       var items = TW.tasks || [];
       var body = items.length
@@ -657,15 +713,36 @@
     var now = new Date(), today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     if (/今天|今日/.test(d)) return 0;
     if (/明天|明日/.test(d)) return 1;
-    var wm = d.match(/周([一二三四五六日天])/);
-    if (wm) { var map = { '一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':0,'天':0 }; return (map[wm[1]] - ((today0.getDay() + 6) % 7) + 7) % 7; }
+    // 标准日期 YYYY-MM-DD（快速待办改造后的格式）
+    var ym = d.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (ym) {
+      var dt0 = new Date(Number(ym[1]), Number(ym[2]) - 1, Number(ym[3]));
+      var days0 = Math.round((dt0 - today0) / 86400000);
+      return days0;
+    }
+    // 周几：支持 周一~周日 / 本周X / 下周一（统一基准：周一=0）
+    var wm = d.match(/(?:本周|下|这)?周([一二三四五六日天])/);
+    if (wm) {
+      var map = { '一':0,'二':1,'三':2,'四':3,'五':4,'六':5,'日':6,'天':6 };
+      var target = map[wm[1]];
+      var cur = (today0.getDay() + 6) % 7; // 周一=0
+      var next = (target - cur + 7) % 7;    // 距最近的目标周几
+      if (next === 0 && /(?:下周)/.test(d)) next = 7; // 明确"下周"且就是今天星期几 → 7 天
+      if (/^(本周|这周)/.test(d) && next === 0) return 0; // 本周X且今天就是 → 今天
+      return next;
+    }
     var dm = d.match(/(\d{1,2})月(\d{1,2})日/);
-    if (dm) { var dt = new Date(today0.getFullYear(), Number(dm[1]) - 1, Number(dm[2])); var days = Math.round((dt - today0) / 86400000); return days < 0 ? 365 + days : days; }
+    if (dm) {
+      var dt = new Date(today0.getFullYear(), Number(dm[1]) - 1, Number(dm[2]));
+      var days = Math.round((dt - today0) / 86400000);
+      return days; // 过去日期返回负数（已过期），不再 +365 错算成明年
+    }
     return 999;
   }
   function campusHero(){
     var pending = TW.tasks.filter(function(t){ return t.status === '待处理' || t.status === '待审批' || t.status === '待审核'; });
-    var urgent = pending.filter(function(t){ return dueDays(t) <= 3; }).sort(function(a, b){ return dueDays(a) - dueDays(b); });
+    // 提醒范围：0~3 天内到期（负数=已过期，不再提醒；999=无法解析，不显示）
+    var urgent = pending.filter(function(t){ var d = dueDays(t); return d >= 0 && d <= 3; }).sort(function(a, b){ return dueDays(a) - dueDays(b); });
     // 任务提醒：精简头部，展示更多条目（最多 8 条）
     var heroList = urgent.length ? urgent.slice(0, 8) : [];
     var urgentHtml = urgent.length
@@ -717,7 +794,7 @@
 
   /* ================= 页面构建器 ================= */
   function renderModule(){
-    var f = { dashboard: dashboard, lessons: lessons, affairs: affairs, students: students, attendance: attendance, scores: scores, homework: homework, meeting: meeting, family: family, dorm: dorm, quality: quality, selection: selection, cleaning: cleaning, points: points, alerts: alerts, personal: personal };
+    var f = { dashboard: dashboard, lessons: lessons, affairs: affairs, students: students, seating: seating, attendance: attendance, scores: scores, homework: homework, meeting: meeting, family: family, dorm: dorm, quality: quality, selection: selection, cleaning: cleaning, points: points, alerts: alerts, personal: personal };
     return (f[state.module] || dashboard)();
   }
 
@@ -725,9 +802,11 @@
     var pending = TW.tasks.filter(function(t){ return t.status === '待处理' || t.status === '待审批'; }).sort(function(a, b){ return dueDays(a) - dueDays(b); });
     var mentalWatch = TW.mental.length;
     var upcoming = TW.affairs.filter(function(a){ return a.date >= new Date().toISOString().slice(0,10); }).sort(function(a,b){ return a.date < b.date ? -1 : 1; }).slice(0, 4);
-    // 今日值日（今天星期几）
+    // 今日值日（考虑单双周轮换：本机自动识别当前单/双周）
     var todayIdx = (new Date().getDay() + 6) % 7;
-    var todayDuty = (TW.cleaning || []).filter(function(c){ return c.week === CLEAN_WEEKS[todayIdx]; })[0];
+    var todayDuty = todayCleaningRows()[0];
+    var todayDutyNames = [];
+    todayCleaningRows().forEach(function(r){ String(r.members || '').split(/[、,，]/).forEach(function(n){ n = n.trim(); if (n && todayDutyNames.indexOf(n) < 0) todayDutyNames.push(n); }); });
     // 预警数（复用 alerts 逻辑的轻量版）
     var alertCount = (TW.students || []).filter(function(s){
       var low = pointTotal(s.sid) < 95;
@@ -735,16 +814,35 @@
       var absent = (TW.attendance || []).filter(function(a){ return recSid(a) === s.sid && a.type === '缺勤'; }).length >= 3;
       return low || mentalNoTalk || absent;
     }).length;
-    return head('班级总览', '今天 · ' + classNameOf() + '班主任 · ' + TW.semester, '<button class="button" data-action="new-record">+ 快速记一笔</button>')
+    /* 首页板块（除图片 hero 外）可拖拽排序：数据键 dashboard_section_order（数组，id 顺序）
+     * 拖拽手柄 = 标题栏右上角小图标（.dash-grip），其余区域保持点击跳转 */
+    var dashOrder = TW.store.read('dashboard_section_order', null);
+    var grip = '<span class="dash-grip" title="拖动调整板块顺序" aria-label="拖动排序">⠿</span>';
+    var dashBlocks = [
+      { id: 'duty', html: todayDuty ? '<section class="section dash-sortable" data-dash-section="duty"><div class="section-title"><span>今日值日 <small>' + CLEAN_WEEKS[todayIdx] + ' · ' + cleanWeekType() + (nowTermLabel()) + '</small></span>' + grip + '</div><div class="section-body"><div class="clean-card-grid">' + todayCleaningRows().map(function(r){
+          var t = r.weekType || '每周';
+          var typeCls = t === '每周' ? 'ok' : (t === '单周' ? 'info' : 'warn');
+          return '<div class="clean-card today" data-action="goto-cleaning" role="button" tabindex="0" title="点击进入值日表"><div class="clean-card-head"><span class="clean-card-week">' + TW.escape(r.week) + '</span><span class="status-badge ' + typeCls + '">' + TW.escape(t) + '</span><span class="status-badge danger">今日</span></div><div class="clean-card-task">' + TW.escape(r.task || '') + '</div><div class="clean-card-members">' + String(r.members || '').split(/[、,，]/).filter(function(n){ return n.trim(); }).map(function(n){ var s = (TW.students || []).find(function(x){ return x.name === n; }); var g = s ? s.gender : ''; var cls = g === '男' ? ' clean-male' : (g === '女' ? ' clean-female' : ''); return '<i class="' + cls.trim() + '">' + TW.escape(n) + '</i>'; }).join('') + '</div></div>';
+        }).join('') + '</div></div></section>' : null },
+      { id: 'tasks', html: '<section class="section dash-sortable" data-dash-section="tasks"><div class="section-title"><span>今日待办 <small>点击直达对应板块</small></span>' + grip + '</div><div class="section-body"><ul class="mini-list">' + (pending.length ? pending.map(function(t){ return '<li><button class="quick-link" data-action="goto-task" data-kind="' + TW.escape(t.kind || '') + '" title="前往对应板块"><span>' + TW.escape(t.title) + '</span><span class="status-badge warn">' + TW.escape(t.due) + ' ›</span></button></li>'; }).join('') : '<li><span>暂无待办</span></li>') + '</ul></div></section>' },
+      { id: 'upcoming', html: '<section class="section dash-sortable" data-dash-section="upcoming"><div class="section-title"><span>近期班级事务 <small>点击直达对应日期</small></span>' + grip + '</div><div class="section-body"><ul class="mini-list">' + (upcoming.length ? upcoming.map(function(a){ return '<li><button class="quick-link" data-action="goto-affair" data-date="' + TW.escape(a.date) + '" title="前往班级事务日历"><span>' + TW.escape(a.title) + '</span><span class="status-badge info">' + a.date + ' ›</span></button></li>'; }).join('') : '<li><span>暂无安排</span></li>') + '</ul></div></section>' }
+    ];
+    // 按保存顺序渲染（未保存的追加到末尾；今日值日无数据时跳过）
+    var dashById = {};
+    dashBlocks.forEach(function(b){ if (b.html) dashById[b.id] = b; });
+    var dashHtml = '';
+    if (Array.isArray(dashOrder) && dashOrder.length) {
+      dashOrder.forEach(function(id){ if (dashById[id]) { dashHtml += dashById[id].html; delete dashById[id]; } });
+    }
+    Object.keys(dashById).forEach(function(id){ dashHtml += dashById[id].html; });
+    return head('班级总览', '今天 · ' + classNameOf() + '班主任 · ' + TW.semester, '<button class="button" data-action="quick-task">+ 快速待办</button><button class="button" data-action="new-record">+ 快速记一笔</button>')
       + '<div class="grid-4">'
       + '<div class="stat-card"><div class="stat-label">学生人数</div><div class="stat-value">' + TW.students.length + '</div><div class="stat-sub">' + classNameOf() + '</div></div>'
       + '<div class="stat-card"><div class="stat-label">待办事项</div><div class="stat-value">' + pending.length + '</div><div class="stat-sub">需跟进</div></div>'
-      + '<div class="stat-card"><div class="stat-label">今日值日</div><div class="stat-value">' + (todayDuty ? (todayDuty.members || '').split(/[、,，]/).length : 0) + '</div><div class="stat-sub">' + CLEAN_WEEKS[todayIdx] + (todayDuty ? ' · ' + todayDuty.task : ' · 未安排') + '</div></div>'
+      + '<div class="stat-card"><div class="stat-label">今日值日</div><div class="stat-value">' + todayDutyNames.length + '</div><div class="stat-sub">' + CLEAN_WEEKS[todayIdx] + ' · ' + cleanWeekType() + (todayDuty ? ' · ' + todayDuty.task : ' · 未安排') + '</div></div>'
       + '<div class="stat-card"><div class="stat-label">预警学生</div><div class="stat-value ' + (alertCount ? 'danger-text' : '') + '">' + alertCount + '</div><div class="stat-sub">积分/心理/考勤</div></div>'
       + '</div>'
-      + (todayDuty ? '<section class="section"><div class="section-title">今日值日 <small>' + CLEAN_WEEKS[todayIdx] + ' · ' + TW.escape(todayDuty.task || '') + '</small></div><div class="section-body"><div class="mini-list">' + String(todayDuty.members || '').split(/[、,，]/).map(function(n){ return '<li><span>' + TW.escape(n.trim()) + '</span></li>'; }).join('') + '</div></div></section>' : '')
-      + '<section class="section"><div class="section-title">今日待办 <small>按时间排序 · 点击直达对应板块</small></div><div class="section-body"><ul class="mini-list">' + (pending.length ? pending.map(function(t){ return '<li><button class="quick-link" data-action="goto-task" data-kind="' + TW.escape(t.kind || '') + '" title="前往对应板块"><span>' + TW.escape(t.title) + '</span><span class="status-badge warn">' + TW.escape(t.due) + ' ›</span></button></li>'; }).join('') : '<li><span>暂无待办</span></li>') + '</ul></div></section>'
-      + '<section class="section"><div class="section-title">近期班级事务 <small>点击直达对应日期</small></div><div class="section-body"><ul class="mini-list">' + (upcoming.length ? upcoming.map(function(a){ return '<li><button class="quick-link" data-action="goto-affair" data-date="' + TW.escape(a.date) + '" title="前往班级事务日历"><span>' + TW.escape(a.title) + '</span><span class="status-badge info">' + a.date + ' ›</span></button></li>'; }).join('') : '<li><span>暂无安排</span></li>') + '</ul></div></section>';
+      + dashHtml;
   }
 
   function affairs(){
@@ -984,7 +1082,7 @@
       var period = schedCls.length ? schedCls[0].period : 0;
       var periodTag = period ? ('第' + period + '节') : '手动';
       var done = !!(l && (l.content || l.plan || l.homework));
-      var title = TW.escape(cls + ' ' + ds + (period ? '（' + periodTag + '）' : '（手动）') + ' · 点击' + (l ? '编辑' : '录入') + '课时');
+      var title = l ? TW.escape(cls + ' ' + ds + (period ? '（' + periodTag + '）' : '（手动）') + ' · 点击编辑课时') : TW.escape(cls + ' ' + ds);
       // 空格也带 data-action，保证可点击
       return '<div class="ls-cell ' + (isToday ? 'today' : '') + (m ? ' c-' + l.color : '') + (l ? '' : ' ls-empty') + '"' + (m ? ' style="--swatch:' + m.bg + ';--swatch-fg:' + m.fg + '"' : '') + ' data-action="lesson-edit" data-cls="' + TW.escape(cls) + '" data-date="' + ds + '" role="button" tabindex="0" title="' + title + '"><span class="ls-cell-head">' + (period ? '<span class="ls-cell-period">' + periodTag + '</span>' : '<span class="ls-cell-period ls-manual">手动</span>') + (done ? '<span class="ls-cell-state done">✓</span>' : (l ? '<span class="ls-cell-state todo">待记</span>' : '<span class="ls-cell-state none">＋</span>')) + '</span>' + (l ? '<span class="ls-cell-text">' + TW.escape(text.length > 26 ? text.slice(0, 26) + '…' : text) + '</span>' + (l.homework ? '<span class="ls-cell-hw">✎ ' + TW.escape(l.homework.length > 14 ? l.homework.slice(0, 14) + '…' : l.homework) + '</span>' : '') : '<span class="ls-cell-plus">＋ 点击录入</span>') + '</div>';
     }
@@ -1055,8 +1153,13 @@
   }
 
   function meeting(){
+    function attHtml(m){
+      var atts = m.attachments || [];
+      if (!atts.length) return '';
+      return '<div class="note" style="margin-top:4px">📎 ' + atts.map(function(a){ return '<a href="/api/attachments/' + TW.escape(a.id) + '" download class="button text" style="text-decoration:underline">' + TW.escape(a.name) + '</a>'; }).join(' ') + '</div>';
+    }
     return head('班会与德育', '记录讲过的班会 + 计划未来的班会', '<button class="button" data-action="new-meeting">+ 记录班会</button><button class="button secondary" data-action="new-meeting-plan">+ 新增计划</button>')
-      + '<section class="section"><div class="section-title">班会记录 <small>可编辑 · 日期 / 主题 / 内容 / 状态</small></div><div class="section-body"><div class="data-table-wrap"><table class="data-table no-edit-table"><thead><tr><th>日期</th><th>主题</th><th>内容</th><th>状态</th><th>操作</th></tr></thead><tbody>' + TW.meetings.map(function(m, i){ return '<tr><td class="mono">' + m.date + '</td><td>' + TW.escape(m.topic) + '</td><td>' + TW.escape(m.content || '') + '</td><td><span class="status-badge ok">' + (m.status || '已归档') + '</span></td><td><button class="button text" data-action="edit-list-row" data-list="meetings" data-idx="' + i + '">编辑</button><button class="button text danger-text" data-action="delete-list-row" data-list="meetings" data-idx="' + i + '">删除</button></td></tr>'; }).join('') + '</tbody></table></div></div></section>'
+      + '<section class="section"><div class="section-title">班会记录 <small>可编辑 · 日期 / 主题 / 内容 / 附件留档</small></div><div class="section-body"><div class="data-table-wrap"><table class="data-table no-edit-table"><thead><tr><th>日期</th><th>主题</th><th>内容</th><th>状态</th><th>操作</th></tr></thead><tbody>' + TW.meetings.map(function(m, i){ return '<tr><td class="mono">' + m.date + '</td><td>' + TW.escape(m.topic) + attHtml(m) + '</td><td>' + TW.escape(m.content || '') + '</td><td><span class="status-badge ok">' + (m.status || '已归档') + '</span></td><td><button class="button text" data-action="edit-list-row" data-list="meetings" data-idx="' + i + '">编辑</button><button class="button text danger-text" data-action="delete-list-row" data-list="meetings" data-idx="' + i + '">删除</button></td></tr>'; }).join('') + '</tbody></table></div></div></section>'
       + '<section class="section"><div class="section-title">班会计划 <small>可编辑 · 未来要讲的班会</small></div><div class="section-body"><div class="data-table-wrap"><table class="data-table no-edit-table"><thead><tr><th>日期</th><th>主题</th><th>目标</th><th>操作</th></tr></thead><tbody>' + TW.meetingPlan.map(function(p, i){ return '<tr><td class="mono">' + p.date + '</td><td>' + TW.escape(p.topic) + '</td><td>' + TW.escape(p.goal || '') + '</td><td><button class="button text" data-action="edit-list-row" data-list="meetingPlan" data-idx="' + i + '">编辑</button><button class="button text danger-text" data-action="delete-list-row" data-list="meetingPlan" data-idx="' + i + '">删除</button></td></tr>'; }).join('') + '</tbody></table></div></div></section>';
   }
 
@@ -1070,14 +1173,343 @@
   function dorm(){
     var blocks = (TW.dorm || []).map(function(d, i){
       var members = String(d.members || '').split(/[、,，]/).filter(function(n){ return n.trim(); });
-      return '<button class="dorm-block" data-action="edit-dorm" data-idx="' + i + '"><span class="dorm-room">' + TW.escape(d.room || ('宿舍' + (i + 1))) + '</span><span class="dorm-leader">舍长：' + TW.escape(d.leader || '—') + '</span><span class="dorm-members">' + members.map(function(n){ return '<i>' + TW.escape(n.trim()) + '</i>'; }).join('') + '</span><span class="dorm-score">当前分数：' + (d.score != null && d.score !== '' ? TW.escape(String(d.score)) : '—') + '</span></button>';
+      // 宿舍按性别着色：男生宿舍浅蓝、女生宿舍浅粉（默认无性别时不加特殊底色）
+      var g = String(d.gender || '');
+      var genderCls = g === '男' ? ' dorm-male' : (g === '女' ? ' dorm-female' : '');
+      return '<button class="dorm-block' + genderCls + '" data-action="edit-dorm" data-idx="' + i + '"><span class="dorm-room">' + TW.escape(d.room || ('宿舍' + (i + 1))) + '</span><span class="dorm-leader">舍长：' + TW.escape(d.leader || '—') + '</span><span class="dorm-members">' + members.map(function(n){ return '<i>' + TW.escape(n.trim()) + '</i>'; }).join('') + '</span><span class="dorm-score">当前分数：' + (d.score != null && d.score !== '' ? TW.escape(String(d.score)) : '—') + '</span></button>';
     }).join('');
     return head('宿舍管理', '宿舍块状管理 · 谁和谁一个宿舍一目了然', '<button class="button" data-action="new-dorm">+ 新增宿舍</button><button class="button secondary" data-action="new-dorm-visit">+ 探访记录</button>')
       + '<section class="section"><div class="section-title">宿舍信息 <small>点击宿舍卡片查看并编辑详情（舍长 / 当前分数 / 备注）</small></div><div class="section-body"><div class="dorm-grid">' + (blocks || '<div class="empty-state">暂无宿舍，点击右上角「+ 新增宿舍」</div>') + '</div></div></section>'
       + '<section class="section"><div class="section-title">探访记录 <small>可编辑 · 班主任何时探访了哪个宿舍</small></div><div class="section-body"><div class="data-table-wrap"><table class="data-table no-edit-table"><thead><tr><th>日期</th><th>宿舍</th><th>备注</th><th>操作</th></tr></thead><tbody>' + TW.dormVisits.map(function(v, i){ return '<tr><td class="mono">' + v.date + '</td><td>' + TW.escape(v.room) + '</td><td>' + TW.escape(v.note || '') + '</td><td><button class="button text" data-action="edit-list-row" data-list="dormVisits" data-idx="' + i + '">编辑</button><button class="button text danger-text" data-action="delete-list-row" data-list="dormVisits" data-idx="' + i + '">删除</button></td></tr>'; }).join('') + '</tbody></table></div></div></section>';
   }
 
+  /* ================= 座位表（可视化排座） =================
+   * 课室布局：4 大组横向排布，每组 2 列 × 7 排（同桌两人），共 56 座。
+   * 数据：seating_c1 → { seats: [组][排][列] 每座 {sid,name}|null, lastAction, undo }
+   * 交互：拖动换位 / 点击选中后再点目标交换 / 整组右移 / 同桌互换 / 前后轮换 / 重置 / 撤销
+   * 首次进入无数据时自动按名单顺序排座（男生与男生同桌、女生与女生同桌）。
+   */
+  var SEAT_GROUPS = 4, SEAT_ROWS = 7, SEAT_COLS = 2;
+  var seatSel = null; // {g,r,c} 点击选中待交换的座位
+  var seatDrag = null; // 拖动源 {g,r,c}
+  function seatStudent(seat){
+    if (!seat) return null;
+    var s = (TW.students || []).find(function(x){ return x.sid === seat.sid || (x.id && x.id === seat.sid) || x.name === seat.name; });
+    return s || null;
+  }
+  /* 首次自动排座：同性同桌（男生与男生、女生与女生），按名单顺序从左到右、从前到后填充 */
+  function autoSeating(){
+    var girls = (TW.students || []).filter(function(s){ return s.gender === '女'; });
+    var boys  = (TW.students || []).filter(function(s){ return s.gender === '男'; });
+    var seats = [];
+    for (var g = 0; g < SEAT_GROUPS; g++) { seats.push([]); for (var r = 0; r < SEAT_ROWS; r++) seats[g].push([null, null]); }
+    var bi = 0, gi = 0;
+    function place(pool, idx){ return { sid: pool[idx].sid || '', name: pool[idx].name }; }
+    // 男生：组0 全部 + 组1 前5排（14 + 10 = 24）
+    for (var g = 0; g < 4 && bi < boys.length; g++) {
+      var maxR = (g === 0) ? SEAT_ROWS : 5;
+      for (var r = 0; r < maxR && bi < boys.length; r++) for (var c = 0; c < SEAT_COLS && bi < boys.length; c++) seats[g][r][c] = place(boys, bi++);
+    }
+    // 女生：组1 第6-7排 + 组2 全部 + 组3 全部（4 + 14 + 14 = 32）
+    for (var g2 = 1; g2 < 4 && gi < girls.length; g2++) {
+      var minR = (g2 === 1) ? 5 : 0;
+      for (var r2 = minR; r2 < SEAT_ROWS && gi < girls.length; r2++) for (var c2 = 0; c2 < SEAT_COLS && gi < girls.length; c2++) seats[g2][r2][c2] = place(girls, gi++);
+    }
+    return { seats: seats, lastAction: '初始排座（同性同桌）', undo: null };
+  }
+  function seatOccCount(){
+    var n = 0;
+    (TW.seating && TW.seating.seats || []).forEach(function(gr){ gr.forEach(function(rw){ rw.forEach(function(s){ if (s) n++; }); }); });
+    return n;
+  }
+  function seatCellHtml(seat, g, r, c){
+    var selected = seatSel && seatSel.g === g && seatSel.r === r && seatSel.c === c;
+    if (!seat) {
+      return '<div class="seat seat-empty' + (selected ? ' selected' : '') + '" data-g="' + g + '" data-r="' + r + '" data-c="' + c + '" title="空位，可将学生拖入或点击选中后点学生交换"></div>';
+    }
+    var st = seatStudent(seat);
+    var gender = st ? st.gender : '';
+    var cls = gender === '男' ? ' seat-male' : (gender === '女' ? ' seat-female' : '');
+    var sid = seat.sid ? ' data-sid="' + TW.escape(seat.sid) + '"' : '';
+    return '<div class="seat' + cls + (selected ? ' selected' : '') + '" draggable="true" data-g="' + g + '" data-r="' + r + '" data-c="' + c + '"' + sid + ' data-name="' + TW.escape(seat.name || '') + '" title="' + TW.escape(seat.name || '') + (gender ? ' · ' + gender + '生' : '') + '（拖动或点击换位）"><span class="seat-name">' + TW.escape(seat.name || '') + '</span></div>';
+  }
+  function seating(){
+    if (!TW.seating || !TW.seating.seats) { TW.seating = autoSeating(); cw('seating', TW.seating); }
+    var grid = '';
+    for (var g = 0; g < SEAT_GROUPS; g++) {
+      var rowsHtml = '';
+      for (var r = 0; r < SEAT_ROWS; r++) {
+        var rowHtml = '';
+        for (var c = 0; c < SEAT_COLS; c++) rowHtml += seatCellHtml((TW.seating.seats[g] || [])[r] ? TW.seating.seats[g][r][c] : null, g, r, c);
+        rowsHtml += '<div class="seat-row" data-g="' + g + '" data-r="' + r + '">' + rowHtml + '</div>';
+      }
+      grid += '<div class="seat-group" data-g="' + g + '"><div class="seat-group-label">第' + (g + 1) + '组</div>' + rowsHtml + '</div>';
+    }
+    var undoDisabled = TW.seating.undo ? '' : ' disabled';
+    return head('座位表', '4 大组 × 7 排 × 2 列（同桌两人） · ' + classNameOf() + '共 ' + seatOccCount() + ' / 56 座', '<button class="button" data-action="seat-print">打印座位表</button>')
+      + '<div class="toolbar" style="margin:10px 0;flex-wrap:wrap;gap:8px"><span class="note">拖动座位可直接换位；或点选一个座位再点另一个交换。</span><button class="button secondary" data-action="seat-shift">↻ 整组右移</button><button class="button secondary" data-action="seat-desk-swap">⇄ 同桌互换</button><button class="button secondary" data-action="seat-row-rotate">⇅ 前后轮换</button><button class="button secondary" data-action="seat-reset">重置排座</button><button class="button secondary" data-action="seat-undo"' + undoDisabled + '>↩ 撤销</button></div>'
+      + '<section class="section"><div class="section-title">课室座位 <small>' + (TW.seating.lastAction || '') + ' · 蓝色=男生 粉色=女生</small></div><div class="section-body"><div class="seat-board"><div class="seat-stage">讲 台</div>' + grid + '</div></div></section>'
+      + '<div class="seat-print-root" style="display:none"><h1 class="seat-print-title">座位表</h1><div class="seat-board seat-board-print"><div class="seat-stage">讲 台</div>' + grid + '</div></div>';
+  }
+  function seatClone(){ return JSON.parse(JSON.stringify(TW.seating.seats)); }
+  /* 操作前保存撤销快照（必须在修改座位之前调用） */
+  function seatPushUndo(){
+    TW.seating.undo = { seats: seatClone(), label: (TW.seating.lastAction || '') };
+  }
+  function seatCommit(actionLabel){
+    TW.seating.lastAction = actionLabel;
+    cw('seating', TW.seating);
+    seatSel = null;
+    renderShell();
+    TW.toast('座位已' + actionLabel);
+  }
+  function seatSwap(a, b){
+    var tmp = TW.seating.seats[a.g][a.r][a.c];
+    TW.seating.seats[a.g][a.r][a.c] = TW.seating.seats[b.g][b.r][b.c];
+    TW.seating.seats[b.g][b.r][b.c] = tmp;
+  }
+  function seatNameOf(pos){ var s = TW.seating.seats[pos.g][pos.r][pos.c]; return s ? s.name : '空位'; }
+  /* 整组右移一组：组1→组2、组2→组3、组3→组4、组4→组1（同桌一起走） */
+  function seatShiftGroups(){
+    seatPushUndo();
+    var copy = seatClone();
+    for (var g = 0; g < SEAT_GROUPS; g++) TW.seating.seats[(g + 1) % SEAT_GROUPS] = copy[g];
+    seatCommit('整组右移一组');
+  }
+  /* 同桌互换：每组每排左右两人交换 */
+  function seatSwapDeskmates(){
+    seatPushUndo();
+    for (var g = 0; g < SEAT_GROUPS; g++) for (var r = 0; r < SEAT_ROWS; r++) {
+      var tmp = TW.seating.seats[g][r][0];
+      TW.seating.seats[g][r][0] = TW.seating.seats[g][r][1];
+      TW.seating.seats[g][r][1] = tmp;
+    }
+    seatCommit('同桌互换');
+  }
+  /* 前后轮换：每组内 7 排循环后移一排（第7排→第1排） */
+  function seatRotateRows(){
+    seatPushUndo();
+    var copy = seatClone();
+    for (var g = 0; g < SEAT_GROUPS; g++) for (var r = 0; r < SEAT_ROWS; r++) TW.seating.seats[g][r] = copy[g][(r + SEAT_ROWS - 1) % SEAT_ROWS];
+    seatCommit('前后轮换一排');
+  }
+  function seatReset(){
+    seatPushUndo();
+    TW.seating.seats = autoSeating().seats;
+    seatCommit('重置为名单顺序排座');
+  }
+  function seatUndo(){
+    if (!TW.seating || !TW.seating.undo) { TW.toast('没有可撤销的操作', 'danger'); return; }
+    TW.seating.seats = TW.seating.undo.seats;
+    var label = TW.seating.undo.label || '';
+    TW.seating.undo = null;
+    TW.seating.lastAction = '已撤销（' + label + '）';
+    cw('seating', TW.seating);
+    seatSel = null;
+    renderShell();
+    TW.toast('已撤销上一步操作');
+  }
+  function seatPrint(){
+    // 打印时只输出：标题《座位表》+ 讲台 + 按位置分布的人名（body.seat-print 由 print.css 控制隐藏其余内容）
+    document.body.classList.add('seat-print');
+    window.print();
+    setTimeout(function(){ document.body.classList.remove('seat-print'); }, 100);
+  }
+  function seatViewStudent(name){
+    var s = (TW.students || []).find(function(x){ return x.name === name; });
+    if (!s) { TW.toast('未在学生档案中找到「' + name + '」', 'danger'); return; }
+    viewStudent(name);
+  }
+  /* 座位表交互绑定（渲染后调用，避免事件重复绑定） */
+  function bindSeating(){
+    var board = TW.$('.seat-board', TW.$('#mainContent'));
+    if (!board || board.dataset.bound) return;
+    board.dataset.bound = '1';
+    var seats = function(){ return TW.$$('.seat', board); };
+    function posOf(el){ return { g: Number(el.dataset.g), r: Number(el.dataset.r), c: Number(el.dataset.c) }; }
+    seats().forEach(function(cell){
+      cell.addEventListener('click', function(e){
+        // 拖动结束后浏览器会补发一次 click，用时间戳过滤
+        if (Date.now() - (Number(cell.dataset.dragAt) || 0) < 300) return;
+        var p = posOf(cell);
+        var cur = TW.seating.seats[p.g][p.r][p.c];
+        if (!seatSel) {
+          if (!cur) { TW.toast('空位不可作为起点，请先点选学生', 'danger'); return; }
+          seatSel = p; renderShell(); TW.toast('已选中 ' + cur.name + '，再点另一个座位交换');
+          return;
+        }
+        if (seatSel.g === p.g && seatSel.r === p.r && seatSel.c === p.c) {
+          // 再次点击同一个座位：取消选中并打开学生卡
+          seatSel = null; renderShell();
+          if (cur) seatViewStudent(cur.name);
+          return;
+        }
+        var from = TW.seating.seats[seatSel.g][seatSel.r][seatSel.c];
+        var a = { g: seatSel.g, r: seatSel.r, c: seatSel.c }, b = { g: p.g, r: p.r, c: p.c };
+        TW.seating.undo = { seats: seatClone(), label: (TW.seating.lastAction || '') };
+        var fromName = from ? from.name : '空位', toName = cur ? cur.name : '空位';
+        seatSwap(a, b);
+        TW.seating.lastAction = '换位：' + fromName + ' ↔ ' + toName;
+        cw('seating', TW.seating);
+        seatSel = null;
+        renderShell();
+        TW.toast('已交换 ' + fromName + ' 与 ' + toName);
+      });
+      // 拖动换位（HTML5 DnD）：只处理座位到座位的交换，drop 在最近的目标座位
+      cell.addEventListener('dragstart', function(e){
+        var p = posOf(cell);
+        if (!TW.seating.seats[p.g][p.r][p.c]) { e.preventDefault(); return; }
+        seatDrag = p;
+        cell.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'seat');
+        try { e.dataTransfer.setDragImage(cell, 20, 20); } catch (err) {}
+      });
+      cell.addEventListener('dragend', function(){
+        seatDrag = null;
+        cell.classList.remove('dragging');
+        seats().forEach(function(x){ x.classList.remove('drop-target'); });
+      });
+      cell.addEventListener('dragover', function(e){
+        if (!seatDrag) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        seats().forEach(function(x){ x.classList.remove('drop-target'); });
+        cell.classList.add('drop-target');
+      });
+      cell.addEventListener('dragleave', function(){ cell.classList.remove('drop-target'); });
+      cell.addEventListener('drop', function(e){
+        e.preventDefault();
+        seats().forEach(function(x){ x.classList.remove('drop-target'); });
+        if (!seatDrag) return;
+        var from = { g: seatDrag.g, r: seatDrag.r, c: seatDrag.c };
+        var to = posOf(cell);
+        if (from.g === to.g && from.r === to.r && from.c === to.c) return;
+        var src = TW.seating.seats[from.g][from.r][from.c];
+        if (!src) return;
+        TW.seating.undo = { seats: seatClone(), label: (TW.seating.lastAction || '') };
+        var fromName = src.name, toName = seatNameOf(to);
+        seatSwap(from, to);
+        TW.seating.lastAction = '拖动换位：' + fromName + ' ↔ ' + toName;
+        cw('seating', TW.seating);
+        cell.dataset.dragAt = String(Date.now()); // 过滤拖放后的 click
+        seatDrag = null;
+        renderShell();
+        TW.toast('已交换 ' + fromName + ' 与 ' + toName);
+      });
+    });
+  }
+
   function levelBadge(l){ return '<span class="status-badge ' + (l >= 2 ? 'danger' : 'warn') + '">L' + l + '</span>'; }
+
+  /* ================= 首页板块拖拽排序（除图片 hero 外） =================
+   * 拖动 .dash-sortable 的 section 重排；顺序持久化到 dashboard_section_order */
+  function bindDashboardSort(){
+    var main = TW.$('#mainContent');
+    if (!main) return;
+    var blocks = function(){ return TW.$$('.dash-sortable', main); };
+    var dragEl = null;
+    blocks().forEach(function(block){
+      // 仅标题栏右上角小图标（.dash-grip）作为拖拽手柄；其余区域（卡片/链接）保持点击跳转
+      var grip = block.querySelector('.dash-grip');
+      if (!grip) return;
+      grip.draggable = true;
+      grip.addEventListener('dragstart', function(e){
+        dragEl = block;
+        block.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'dash');
+        try { e.dataTransfer.setDragImage(block, 20, 20); } catch (err) {}
+      });
+      grip.addEventListener('dragend', function(){
+        dragEl = null;
+        blocks().forEach(function(x){ x.classList.remove('dragging', 'drop-before', 'drop-after'); });
+        // 持久化当前顺序
+        var order = blocks().map(function(x){ return x.dataset.dashSection; });
+        TW.store.write('dashboard_section_order', order);
+        TW.toast('已保存首页板块顺序');
+      });
+      block.addEventListener('dragover', function(e){
+        if (!dragEl || dragEl === block) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        blocks().forEach(function(x){ x.classList.remove('drop-before', 'drop-after'); });
+        var r = block.getBoundingClientRect();
+        var before = (e.clientY < r.top + r.height / 2);
+        block.classList.add(before ? 'drop-before' : 'drop-after');
+      });
+      block.addEventListener('drop', function(e){
+        e.preventDefault();
+        if (!dragEl || dragEl === block) return;
+        blocks().forEach(function(x){ x.classList.remove('drop-before', 'drop-after'); });
+        var r = block.getBoundingClientRect();
+        var before = (e.clientY < r.top + r.height / 2);
+        if (before) main.insertBefore(dragEl, block);
+        else main.insertBefore(dragEl, block.nextSibling);
+      });
+    });
+  }
+
+  /* ================= 日历事件拖拽改期（班级事务 / 个人备忘） =================
+   * 拖动 .cal-event 到另一日期格子，更新记录 date 并保存。
+   * 注意：每次渲染都重新绑定（renderShell 重建 DOM，不会重复监听） */
+  function bindCalendarDrag(){
+    var main = TW.$('#mainContent');
+    if (!main) return;
+    var isPersonal = (state.module === 'personal');
+    var dragEv = null;
+    TW.$$('.cal-event', main).forEach(function(ev){
+      ev.draggable = true;
+      ev.addEventListener('dragstart', function(e){
+        dragEv = ev;
+        ev.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'cal');
+        try { e.dataTransfer.setDragImage(ev, 20, 20); } catch (err) {}
+        // 记录拖拽时间，用于抑制 drop 后的格子 click
+        window.__calDragAt = Date.now();
+      });
+      ev.addEventListener('dragend', function(){
+        dragEv = null;
+        TW.$$('.cal-cell', main).forEach(function(c){ c.classList.remove('drop-target'); });
+        ev.classList.remove('dragging');
+      });
+    });
+    TW.$$('.cal-cell:not(.empty)', main).forEach(function(cell){
+      cell.addEventListener('dragover', function(e){
+        if (!dragEv) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        TW.$$('.cal-cell', main).forEach(function(c){ c.classList.remove('drop-target'); });
+        cell.classList.add('drop-target');
+      });
+      cell.addEventListener('dragleave', function(){ cell.classList.remove('drop-target'); });
+      cell.addEventListener('drop', function(e){
+        e.preventDefault();
+        TW.$$('.cal-cell', main).forEach(function(c){ c.classList.remove('drop-target'); });
+        if (!dragEv) return;
+        var targetDate = cell.dataset.date;
+        var title = dragEv.textContent.trim();
+        var moved = false;
+        if (isPersonal) {
+          // 个人备忘：按 title 定位记录（同一日期可能有同名，取第一个未改期的）
+          var rec = (TW.personalMemo || []).find(function(x){ return x.title === title && x.date !== targetDate; });
+          if (rec) { rec.date = targetDate; gw('personal_memo', TW.personalMemo); moved = true; }
+        } else {
+          // 班级事务：按 title 定位（同一日期可能有同名）
+          var rec2 = (TW.affairs || []).find(function(x){ return x.title === title && x.date !== targetDate; });
+          if (rec2) { rec2.date = targetDate; cw('affairs', TW.affairs); moved = true; }
+        }
+        if (moved) {
+          window.__calDragAt = Date.now(); // 抑制随后的格子 click（打开弹窗）
+          renderShell();
+          TW.toast('已移至 ' + targetDate + '（' + title + '）');
+        } else {
+          TW.toast('未找到可移动的记录', 'danger');
+        }
+      });
+    });
+  }
   function quality(){
     return head('综合素质评价', '五育过程记录 + 完整学期评语', '<button class="button" data-action="new-quality">+ 新增评价</button>')
       + '<section class="section"><div class="section-title">评价档案 <small>可编辑 · 点击「编辑」修改五育等级与学期评语</small></div><div class="section-body"><div class="data-table-wrap"><table class="data-table no-edit-table"><thead><tr><th>姓名</th><th>道德</th><th>学业</th><th>健康</th><th>艺术</th><th>劳动</th><th>操作</th></tr></thead><tbody>' + TW.quality.map(function(q, i){ return '<tr><td>' + TW.escape(q.name) + '</td><td>' + q.moral + '</td><td>' + q.academic + '</td><td>' + q.health + '</td><td>' + q.art + '</td><td>' + q.labor + '</td><td><button class="button text" data-action="edit-list-row" data-list="quality" data-idx="' + i + '">编辑</button><button class="button text danger-text" data-action="delete-list-row" data-list="quality" data-idx="' + i + '">删除</button></td></tr>'; }).join('') + '</tbody></table></div></div></section>';
@@ -1094,21 +1526,116 @@
       + '<section class="section"><div class="section-title">意向名单 <small>可编辑 / 导出导入CSV / 新增条目</small></div><div class="section-body"><div class="data-table-wrap"><table class="data-table no-actions"><thead><tr><th>姓名</th><th>首选</th><th>再选组合</th></tr></thead><tbody>' + (sel.intents || []).map(function(i){ return '<tr><td>' + TW.escape(i.name) + '</td><td>' + i.first + '</td><td>' + i.combos + '</td></tr>'; }).join('') + '</tbody></table></div></div></section>';
   }
 
-  /* ============ 学生值日表（班级卫生值日排班，按星期循环；值日内容自定义） ============ */
+  /* ============ 学生值日表（卡片式排班：每周 / 单周 / 双周轮换） ============ */
   var CLEAN_WEEKS = ['周一','周二','周三','周四','周五','周六','周日'];
+  var CLEAN_TYPES = ['每周', '单周', '双周'];
+  /* 开学日期（教师设定，存全局键 term_start，如 "2026-09-01"；未设置返回空串） */
+  function termStartDate(){
+    var v = TW.store.read('term_start', '');
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '';
+  }
+  /* 周次提示语（供首页/值日表复用）：有开学日期 → " · 第 X 周"，否则空 */
+  function nowTermLabel(){
+    var wk = currentTermWeek();
+    var start = termStartDate();
+    return (wk > 0 && start) ? ' · 第 ' + wk + ' 周' : '';
+  }
+  /* 当前是开学后第几周（开学当周 = 第 1 周，按周一为一周起点）；未设置开学日期返回 0 */
+  function currentTermWeek(){
+    var start = termStartDate();
+    if (!start) return 0;
+    var now = new Date(); now.setHours(0, 0, 0, 0);
+    var s = new Date(start + 'T00:00:00');
+    var sMon = new Date(s); sMon.setDate(s.getDate() - ((s.getDay() + 6) % 7)); // 开学周的周一
+    var nMon = new Date(now); nMon.setDate(now.getDate() - ((now.getDay() + 6) % 7)); // 本周周一
+    var days = Math.round((nMon - sMon) / 86400000);
+    var wk = Math.floor(days / 7) + 1;
+    // 开学日期在未来（尚未开学）：按第 1 周处理，避免出现 0/-1 周
+    return wk < 1 ? 1 : wk;
+  }
+  /* 当前是单周还是双周：按开学日期所在周为第 1 周（单周）起算；未设置开学日期时回退自然年周数奇偶 */
+  function cleanWeekType(){
+    var wk = currentTermWeek();
+    if (wk > 0) return (wk % 2 === 1) ? '单周' : '双周';
+    var now = new Date();
+    var onejan = new Date(now.getFullYear(), 0, 1);
+    var week = Math.ceil((((now - onejan) / 86400000) + onejan.getDay() + 1) / 7);
+    return (week % 2 === 1) ? '单周' : '双周';
+  }
+  /* 设置开学日期弹窗（单双周从此周开始轮转） */
+  function setTermStart(){
+    var cur = termStartDate();
+    TW.modal('设置开学日期', '<div class="form-grid"><div class="field"><label class="required">开学日期</label><input id="tsDate" type="date" value="' + cur + '"></div><div class="field full"><small class="note">单双周按学校校历从开学当周开始轮转：开学那周为第 1 周（单周），下一周为第 2 周（双周），以此类推。值日、课表等按周轮换的模块都以此为准。</small></div></div>', '<button class="button secondary" data-close>取消</button><button class="button" id="tsSave">保存</button>');
+    TW.$('#tsSave').onclick = function(){
+      var v = TW.$('#tsDate').value;
+      if (!v) { TW.toast('请选择日期', 'danger'); return; }
+      TW.store.write('term_start', v);
+      TW.$('#modalRoot').innerHTML = ''; renderShell();
+      TW.toast('开学日期已设为 ' + v + '，本周为第 ' + currentTermWeek() + ' 周（' + cleanWeekType() + '）');
+    };
+  }
+  /* 某条排班今天是否生效：每周恒生效；单周/双周按当前周匹配 */
+  function cleanActiveToday(r){
+    var t = r.weekType || '每周';
+    if (t === '每周') return true;
+    return t === cleanWeekType();
+  }
+  /* 今日生效的值日记录（单双周可并存，如周一单周 + 周一双周同时定义时取本周生效的一条） */
+  function todayCleaningRows(){
+    var todayIdx = (new Date().getDay() + 6) % 7; // 周一=0
+    var todayLabel = CLEAN_WEEKS[todayIdx];
+    return (TW.cleaning || []).filter(function(r){ return r.week === todayLabel && cleanActiveToday(r); });
+  }
   function cleaning(){
     var rows = TW.cleaning || [];
     var students = TW.students || [];
-    // 涉及学生去重统计（按顿号/逗号分隔）
+    // 涉及学生去重统计
     var all = [];
     rows.forEach(function(r){ String(r.members || '').split(/[、,，]/).forEach(function(n){ n = n.trim(); if (n && all.indexOf(n) < 0) all.push(n); }); });
-    // 今日值日（今天星期几）
-    var todayIdx = (new Date().getDay() + 6) % 7; // 周一=0
-    var todayLabel = CLEAN_WEEKS[todayIdx];
-    var todayRow = rows.filter(function(r){ return r.week === todayLabel; })[0];
-    return head('值日表', '班级卫生值日排班 · 按星期循环 · 值日内容自定义', '<button class="button" data-action="new-cleaning">+ 新增排班</button>')
-      + '<div class="grid-4"><div class="stat-card"><div class="stat-label">已排星期</div><div class="stat-value">' + rows.length + '</div><div class="stat-sub">周一至周日</div></div><div class="stat-card"><div class="stat-label">涉及学生</div><div class="stat-value">' + all.length + '</div><div class="stat-sub">' + classNameOf() + '共' + students.length + '人</div></div><div class="stat-card"><div class="stat-label">今日值日</div><div class="stat-value ' + (todayRow ? '' : 'danger-text') + '">' + (todayRow ? (todayRow.members || '').split(/[、,，]/).length : '未安排') + '</div><div class="stat-sub">' + todayLabel + (todayRow ? ' · ' + todayRow.task : '') + '</div></div><div class="stat-card"><div class="stat-label">未排班学生</div><div class="stat-value">' + students.filter(function(s){ return all.indexOf(s.name) < 0; }).length + '</div><div class="stat-sub">可补排</div></div></div>'
-      + '<section class="section"><div class="section-title">每周值日安排 <small>可编辑 · 点击「编辑」修改值日学生与内容</small></div><div class="section-body"><div class="data-table-wrap"><table class="data-table no-edit-table"><thead><tr><th>星期</th><th>值日学生</th><th>值日内容</th><th>操作</th></tr></thead><tbody>' + rows.map(function(r, i){ return '<tr><td class="mono">' + r.week + '</td><td>' + TW.escape(r.members) + '</td><td>' + TW.escape(r.task || '') + '</td><td><button class="button text" data-action="edit-list-row" data-list="cleaning" data-idx="' + i + '">编辑</button><button class="button text danger-text" data-action="delete-list-row" data-list="cleaning" data-idx="' + i + '">删除</button></td></tr>'; }).join('') + '</tbody></table></div></div></section>';
+    var todayRows = todayCleaningRows();
+    var todayNames = [];
+    todayRows.forEach(function(r){ String(r.members || '').split(/[、,，]/).forEach(function(n){ n = n.trim(); if (n && todayNames.indexOf(n) < 0) todayNames.push(n); }); });
+    var nowType = cleanWeekType();
+    var nowWeek = currentTermWeek();
+    var termStart = termStartDate();
+    /* 成员姓名按性别着色（与座位表一致：男浅蓝 / 女浅粉） */
+    function cleanMemberChip(n){
+      var s = (TW.students || []).find(function(x){ return x.name === n; });
+      var g = s ? s.gender : '';
+      var cls = g === '男' ? ' clean-male' : (g === '女' ? ' clean-female' : '');
+      return '<i class="' + cls.trim() + '">' + TW.escape(n) + '</i>';
+    }
+    // 卡片式排班：按星期分块（周一~周五优先，周六日并入末尾），每周/单周/双周分组展示
+    function cardHtml(r, i){
+      var t = r.weekType || '每周';
+      var typeCls = t === '每周' ? 'ok' : (t === '单周' ? 'info' : 'warn');
+      var isToday = r.week === CLEAN_WEEKS[(new Date().getDay() + 6) % 7] && cleanActiveToday(r);
+      return '<div class="clean-card' + (isToday ? ' today' : '') + '">'
+        + '<div class="clean-card-head"><span class="clean-card-week">' + TW.escape(r.week) + '</span><span class="status-badge ' + typeCls + '">' + TW.escape(t) + '</span>' + (isToday ? '<span class="status-badge danger">今日</span>' : '') + '</div>'
+        + '<div class="clean-card-task">' + TW.escape(r.task || '') + '</div>'
+        + '<div class="clean-card-members">' + String(r.members || '').split(/[、,，]/).filter(function(n){ return n.trim(); }).map(cleanMemberChip).join('') + '</div>'
+        + '<div class="clean-card-actions"><button class="button text" data-action="edit-list-row" data-list="cleaning" data-idx="' + i + '">编辑</button><button class="button text danger-text" data-action="delete-list-row" data-list="cleaning" data-idx="' + i + '">删除</button></div>'
+        + '</div>';
+    }
+    // 分组：每周 一组、单周 一组、双周 一组（组内按星期顺序）
+    function byType(t){ return rows.map(function(r, i){ return { r: r, i: i }; }).filter(function(x){ return (x.r.weekType || '每周') === t; }); }
+    var weekOrder = { '周一':0,'周二':1,'周三':2,'周四':3,'周五':4,'周六':5,'周日':6 };
+    function sortByWeek(a, b){
+      var wa = weekOrder[a.r.week]; if (wa === undefined) wa = 9;
+      var wb = weekOrder[b.r.week]; if (wb === undefined) wb = 9;
+      return wa - wb;
+    }
+    var groupsHtml = CLEAN_TYPES.map(function(t){
+      var list = byType(t).sort(sortByWeek);
+      if (!list.length) return '';
+      var tLabel = t === '每周' ? '每周固定' : (t === '单周' ? '单周轮换' : '双周轮换');
+      return '<div class="clean-group"><div class="clean-group-title">' + tLabel + ' <small>' + list.length + ' 天</small></div><div class="clean-card-grid">' + list.map(function(x){ return cardHtml(x.r, x.i); }).join('') + '</div></div>';
+    }).join('');
+    var termSub = termStart ? ('开学 ' + termStart + ' · 第 ' + nowWeek + ' 周') : (nowWeek ? ('第 ' + nowWeek + ' 周') : '未设置开学日期，按自然周');
+    var termBtn = '<button class="button secondary" data-action="set-term-start">开学日期</button>';
+    return head('值日表', '卡片式值日排班 · 每周固定 + 单双周轮换 · 值日内容自定义', '<button class="button" data-action="new-cleaning">+ 新增排班</button>' + termBtn)
+      + '<div class="grid-4"><div class="stat-card"><div class="stat-label">本周</div><div class="stat-value">' + nowType + '</div><div class="stat-sub">' + termSub + '</div></div><div class="stat-card"><div class="stat-label">今日值日</div><div class="stat-value ' + (todayNames.length ? '' : 'danger-text') + '">' + todayNames.length + '</div><div class="stat-sub">' + CLEAN_WEEKS[(new Date().getDay() + 6) % 7] + ' · ' + nowType + (todayRows.length ? ' · ' + todayRows[0].task : '') + '</div></div><div class="stat-card"><div class="stat-label">已排班学生</div><div class="stat-value">' + all.length + '</div><div class="stat-sub">' + classNameOf() + '共' + students.length + '人</div></div><div class="stat-card"><div class="stat-label">排班条目</div><div class="stat-value">' + rows.length + '</div><div class="stat-sub">每周 / 单周 / 双周</div></div></div>'
+      + '<section class="section"><div class="section-title">值日排班 <small>单双周按开学日期轮转（开学周=第1周单周）· 成员颜色：蓝=男生 粉=女生</small></div><div class="section-body">' + (groupsHtml || '<div class="empty-state">暂无排班，点击右上角「+ 新增排班」</div>') + '</div></section>';
   }
 
   /* ============ 分数管理（班级量化积分：初始 100 分，加减分记录分数/原因/时间） ============ */
@@ -1306,7 +1833,11 @@
     }
     if (state.module === 'affairs') {
       TW.$$('.cal-cell:not(.empty)', TW.$('#mainContent')).forEach(function(cell){
-        cell.onclick = function(){ quickAddAffair(cell.dataset.date); };
+        cell.onclick = function(){
+          // 拖拽改期后抑制本次 click（避免拖完又弹编辑窗）
+          if (Date.now() - (Number(window.__calDragAt) || 0) < 400) return;
+          quickAddAffair(cell.dataset.date);
+        };
         cell.onkeydown = function(e){ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); quickAddAffair(cell.dataset.date); } };
       });
     }
@@ -1325,10 +1856,17 @@
     }
     if (state.module === 'personal') {
       TW.$$('.cal-cell:not(.empty)', TW.$('#mainContent')).forEach(function(cell){
-        cell.onclick = function(){ quickAddPersonal(cell.dataset.date); };
+        cell.onclick = function(){
+          // 拖拽改期后抑制本次 click（避免拖完又弹编辑窗）
+          if (Date.now() - (Number(window.__calDragAt) || 0) < 400) return;
+          quickAddPersonal(cell.dataset.date);
+        };
         cell.onkeydown = function(e){ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); quickAddPersonal(cell.dataset.date); } };
       });
     }
+    if (state.module === 'seating') bindSeating();
+    if (state.module === 'dashboard') bindDashboardSort();
+    if (state.module === 'affairs' || state.module === 'personal') bindCalendarDrag();
     if (state.module === 'points') {
       TW.$$('#pointsTable th[data-psort]', TW.$('#mainContent')).forEach(function(th){
         th.onclick = function(){
@@ -1392,6 +1930,7 @@
   function action(a, el){
     var f = {
       'new-record': function(){ genericRecordModal('新增记录'); },
+      'quick-task': quickTask,
       'new-student': newStudent,
       'view-student': function(){ var name = el.dataset.name || (el.closest('tr') ? TW.$('td', el.closest('tr')).textContent.trim() : ''); if (name) viewStudent(name); },
       'export-students': function(){ var rows = TW.students; downloadCSV(classNameOf() + '学生名单.csv', [['姓名','学籍号','性别','学籍状态','宿舍','家长','联系电话']].concat(rows.map(function(s){ return [s.name, s.id, s.gender, s.status, s.dorm, s.parent, s.phone]; }))); TW.toast('已导出学生名单'); },
@@ -1441,6 +1980,12 @@
       'new-dorm': newDorm,
       'edit-dorm': function(){ editDorm(Number(el.dataset.idx)); },
       'new-dorm-visit': newDormVisit,
+      'seat-shift': seatShiftGroups,
+      'seat-desk-swap': seatSwapDeskmates,
+      'seat-row-rotate': seatRotateRows,
+      'seat-reset': function(){ if (confirm('确认按名单顺序重置全部座位吗？当前排座将被覆盖（可撤销）。')) seatReset(); },
+      'seat-undo': seatUndo,
+      'seat-print': seatPrint,
       'view-talks': function(){ var name = el.dataset.name || (el.closest('tr') ? TW.$('td', el.closest('tr')).textContent.trim() : ''); if (name) viewTalks(name); },
       'new-quality': newQuality,
       'new-selection': newSelection,
@@ -1450,6 +1995,7 @@
       'pcal-prev': function(){ state.pCalMonth--; if (state.pCalMonth < 0) { state.pCalMonth = 11; state.pCalYear--; } renderShell(); },
       'pcal-next': function(){ state.pCalMonth++; if (state.pCalMonth > 11) { state.pCalMonth = 0; state.pCalYear++; } renderShell(); },
       'goto-task': gotoTask,
+      'goto-cleaning': function(){ gotoModule('cleaning'); },
       'goto-lessons': function(){ gotoModule('lessons'); },
       'goto-affair': gotoAffair,
       'new-affair': newAffair,
@@ -1459,6 +2005,7 @@
       'edit-personal': function(){ editPersonal(el.dataset.pmId); },
       'delete-personal': function(){ deletePersonal(el.dataset.pmId); },
       'new-cleaning': newCleaning,
+      'set-term-start': setTermStart,
       'edit-user-record': editUserRecord,
       'delete-user-record': deleteUserRecord,
       'goto-context': function(){
@@ -1490,6 +2037,53 @@
     TW.modal(title, '<div class="form-grid"><div class="field"><label class="required">事项</label><input id="gTitle" placeholder="请输入名称"></div><div class="field"><label class="required">日期</label><input id="gDate" type="date" value="' + new Date().toISOString().slice(0,10) + '"></div><div class="field full"><label>备注</label><textarea id="gNote" placeholder="补充说明"></textarea></div></div>', '<button class="button secondary" data-close>取消</button><button class="button" id="gSave">保存到本机</button>');
     bindDraftFields(TW.$('.modal-body'), key);
     TW.$('#gSave').onclick = function(){ var t = TW.$('#gTitle').value.trim(); if (!t) { TW.toast('请填写事项名称', 'danger'); return; } saveUserRecord({ id: uid('r'), context: contextId(), kind: 'record', title: t, date: TW.$('#gDate').value, note: TW.$('#gNote').value.trim(), status: '已保存', createdAt: new Date().toISOString(), updatedAt: TW.format.now() }); TW.store.remove(key); TW.$('#modalRoot').innerHTML = ''; renderShell(); TW.toast('已保存到本机'); };
+  }
+
+  /* 首页快速待办：录入自定义待办事项，写入待办台账（tasks_c1），首页待办区即时可见 */
+  function quickTask(){
+    var now = new Date();
+    function dstr(dt){ return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); }
+    var todayStr = dstr(now);
+    var tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+    // 快捷标签：今天 / 明天 / 本周X(最近的下一个) / 下周X
+    function nextWeekday(weekdayNum, addWeek){ // weekdayNum: 周一=0 ... 周日=6
+      var cur = (now.getDay() + 6) % 7;
+      var diff = (weekdayNum - cur + 7) % 7;
+      if (diff === 0) diff = addWeek ? 7 : 0;
+      var dt = new Date(now); dt.setDate(now.getDate() + diff);
+      return dt;
+    }
+    function weekdayCN(n){ return ['周一','周二','周三','周四','周五','周六','周日'][n]; }
+    var quickBtns = [
+      { label: '今天', val: todayStr },
+      { label: '明天', val: dstr(tomorrow) }
+    ];
+    for (var w = 0; w < 7; w++) {
+      quickBtns.push({ label: weekdayCN(w), val: dstr(nextWeekday(w, 0)) });
+      quickBtns.push({ label: '下' + weekdayCN(w), val: dstr(nextWeekday(w, 1)) });
+    }
+    var btnsHtml = quickBtns.map(function(b){ return '<button type="button" class="button secondary quick-due" data-val="' + b.val + '">' + b.label + '</button>'; }).join('');
+    TW.modal('新增待办', '<div class="form-grid"><div class="field full"><label class="required">待办事项</label><input id="qtTitle" placeholder="如：收月考回执、约谈张同学家长" autocomplete="off"></div><div class="field"><label class="required">截止日期</label><input id="qtDue" type="date" value="' + todayStr + '" min="' + todayStr + '"></div><div class="field full"><label>快捷选择</label><div class="quick-due-row">' + btnsHtml + '</div></div><div class="field"><label>类型</label><select id="qtKind"><option>其他</option><option>成绩</option><option>家校</option><option>德育</option><option>宿舍</option><option>选科</option><option>心理</option><option>考试</option><option>教务</option></select></div></div>', '<button class="button secondary" data-close>取消</button><button class="button" id="qtSave">保存待办</button>');
+    // 快捷标签点击 → 填充日期
+    TW.$$('.quick-due').forEach(function(b){
+      b.onclick = function(){
+        TW.$('#qtDue').value = b.dataset.val;
+        TW.$$('.quick-due').forEach(function(x){ x.classList.remove('active'); });
+        b.classList.add('active');
+      };
+    });
+    TW.$('#qtSave').onclick = function(){
+      var t = TW.$('#qtTitle').value.trim();
+      if (!t) { TW.toast('请填写待办事项', 'danger'); return; }
+      var due = TW.$('#qtDue').value.trim();
+      if (!due) { TW.toast('请选择截止日期', 'danger'); return; }
+      TW.tasks.push({ title: t, due: due, kind: TW.$('#qtKind').value, status: '待处理' });
+      cw('tasks', TW.tasks);
+      TW.$('#modalRoot').innerHTML = ''; renderShell();
+      logRecord('待办：新增待办', t + '（' + due + '）');
+      TW.toast('已新增待办');
+    };
+    var inp = TW.$('#qtTitle'); if (inp) inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); TW.$('#qtDue').focus(); } });
   }
 
   /* ============ 学校/教务板块专属新增表单（写入对应台账，全局持久化） ============ */
@@ -1553,8 +2147,9 @@
   }
   function newCleaning(){
     var weekOpts = CLEAN_WEEKS.map(function(w){ return '<option' + (w === todayLabel() ? ' selected' : '') + '>' + w + '</option>'; }).join('');
+    var typeOpts = CLEAN_TYPES.map(function(t){ return '<option' + (t === '每周' ? ' selected' : '') + '>' + t + '</option>'; }).join('');
     var memberOpts = (TW.students || []).map(function(s){ return '<button type="button" class="member-option" data-name="' + TW.escape(s.name) + '">' + TW.escape(s.name) + '</button>'; }).join('');
-    TW.modal('新增值日排班', '<div class="form-grid"><div class="field"><label class="required">星期</label><select id="clWeek">' + weekOpts + '</select></div><div class="field full"><label class="required">值日学生</label><div class="member-picker"><input id="clMembers" placeholder="如：张雨桐、李明轩" autocomplete="off"><div class="member-chips" id="clChips"></div></div><small class="note">从下方名单点选学生（可多选，再次点击取消），或直接输入姓名，用顿号分隔</small><div class="member-options" id="clOptions">' + memberOpts + '</div></div><div class="field full"><label class="required">值日内容</label><input id="clTask" placeholder="如：扫地、拖地、擦黑板（可自定义）"><div class="task-quick" id="clQuick"></div></div></div>', '<button class="button secondary" data-close>取消</button><button class="button" id="clSave">保存排班</button>');
+    TW.modal('新增值日排班', '<div class="form-grid"><div class="field"><label class="required">星期</label><select id="clWeek">' + weekOpts + '</select></div><div class="field"><label class="required">轮换</label><select id="clType">' + typeOpts + '</select></div><div class="field full"><label class="required">值日学生</label><div class="member-picker"><input id="clMembers" placeholder="如：张雨桐、李明轩" autocomplete="off"><div class="member-chips" id="clChips"></div></div><small class="note">从下方名单点选学生（可多选，再次点击取消），或直接输入姓名，用顿号分隔</small><div class="member-options" id="clOptions">' + memberOpts + '</div></div><div class="field full"><label class="required">值日内容</label><input id="clTask" placeholder="如：扫地、拖地、擦黑板（可自定义）"><div class="task-quick" id="clQuick"></div></div></div>', '<button class="button secondary" data-close>取消</button><button class="button" id="clSave">保存排班</button>');
     // 常用值日内容快捷标签（点击填入）
     var quick = ['扫地','拖地','擦黑板','擦窗台','倒垃圾','擦讲台','大扫除'];
     TW.$('#clQuick').innerHTML = quick.map(function(q){ return '<button type="button" class="button secondary small" data-quick="' + q + '">' + q + '</button>'; }).join('');
@@ -1596,21 +2191,22 @@
     });
     refreshChips();
     TW.$('#clSave').onclick = function(){
-      var week = TW.$('#clWeek').value, members = String(TW.$('#clMembers').value || '').trim().replace(/[,,，]+/g, '、').replace(/^[、]+|[、]+$/g, '');
+      var week = TW.$('#clWeek').value, type = TW.$('#clType').value;
+      var members = String(TW.$('#clMembers').value || '').trim().replace(/[,,，]+/g, '、').replace(/^[、]+|[、]+$/g, '');
       var task = TW.$('#clTask').value.trim();
       if (!members) { TW.toast('请选择值日学生', 'danger'); return; }
       if (!task) { TW.toast('请填写值日内容', 'danger'); return; }
-      // 同星期已有排班则覆盖（避免重复）
-      var idx = TW.cleaning.findIndex(function(x){ return x.week === week; });
+      // 同星期+同轮换类型已有排班则覆盖（避免重复）
+      var idx = TW.cleaning.findIndex(function(x){ return x.week === week && (x.weekType || '每周') === type; });
       if (idx >= 0) {
         TW.cleaning[idx].members = members; TW.cleaning[idx].task = task;
-        TW.toast('已更新' + week + '的值日安排');
+        TW.toast('已更新' + week + type + '的值日安排');
       } else {
-        TW.cleaning.push({ week: week, members: members, task: task });
-        TW.toast('已新增' + week + '的值日安排');
+        TW.cleaning.push({ week: week, weekType: type, members: members, task: task });
+        TW.toast('已新增' + week + type + '的值日安排');
       }
       cw('cleaning', TW.cleaning); TW.$('#modalRoot').innerHTML = ''; renderShell();
-      logRecord('值日表：' + (idx >= 0 ? '更新' : '新增') + '排班', week + ' ' + task);
+      logRecord('值日表：' + (idx >= 0 ? '更新' : '新增') + '排班', week + type + ' ' + task);
     };
   }
   function todayLabel(){
@@ -1630,7 +2226,8 @@
           return '<tr><td class="mono">' + TW.escape(l.time || '—') + '</td><td><span class="' + (d > 0 ? 'ok-text' : 'danger-text') + '">' + (d > 0 ? '+' : '') + d + '</span></td><td>' + TW.escape(l.reason || '') + '</td></tr>';
         }).join('') + '</tbody></table>'
       : '<div class="alert info">暂无加减分记录，当前保持初始 100 分。</div>';
-    TW.modal('积分明细 · ' + name + '（当前 ' + total + ' 分）', rowsHtml);
+    var dlg = TW.modal('积分明细 · ' + name + '（当前 ' + total + ' 分）', rowsHtml);
+    var me = dlg && dlg.root && dlg.root.querySelector('.modal'); if (me) me.classList.add('wide-modal');
   }
   /* 分数管理 · 加减分弹窗（分数 / 原因 / 时间，时间必填） */
   function pointModal(sid, dir){
@@ -1720,7 +2317,8 @@
     // 综评
     var q = (TW.quality || []).find(function(x){ return recSid(x) === sid; });
     if (q) parts.push('<section class="section"><div class="section-title">综合素质评价</div><div class="section-body"><div class="grid-5" style="margin-bottom:8px">' + ['道德','学业','健康','艺术','劳动'].map(function(k){ var e = {道德:q.moral,学业:q.academic,健康:q.health,艺术:q.art,劳动:q.labor}[k]; return '<div class="stat-card"><div class="stat-label">' + k + '</div><div class="stat-value">' + (e || '—') + '</div></div>'; }).join('') + '</div>' + (q.comment ? '<div class="note">' + TW.escape(q.comment) + '</div>' : '') + '</div></section>');
-    TW.modal('成长档案 · ' + s.name, parts.join(''), '<button class="button secondary" data-close>关闭</button>');
+    var dlg = TW.modal('成长档案 · ' + s.name, parts.join(''), '<button class="button secondary" data-close>关闭</button>');
+    var me = dlg && dlg.root && dlg.root.querySelector('.modal'); if (me) me.classList.add('wide-modal');
   }
 
   function newAttendance(){
@@ -1770,7 +2368,7 @@
     var exam = exams.find(function(e){ return e.id === state.examId; }) || exams[0];
     if (!exam) { TW.toast('暂无可导入的考试', 'danger'); return; }
     var subj = TW.subjects;
-    var m = TW.modal('上传成绩 · ' + exam.name, '<div class="import-dialog"><div class="alert info">CSV 格式：首行表头「姓名,' + subj.join('、') + '」，共 ' + (subj.length + 1) + ' 列，顺序须与学科设置一致；支持 UTF-8 CSV（Excel 请"另存为 CSV"）；系统先校验并预览，不会直接覆盖。可先下载模板对照填写。</div><div class="toolbar" style="margin:10px 0"><button class="button secondary" id="examTemplate">⬇ 下载成绩模板</button></div><div class="field"><label class="required">选择成绩 CSV</label><input id="examImportFile" type="file" accept=".csv,text/csv"></div><div id="examImportPreview" class="import-preview note">尚未选择文件</div></div>', '<button class="button secondary" data-close>取消</button><button class="button secondary" id="examAppend" disabled>合并导入</button><button class="button" id="examReplace" disabled>替换导入</button>');
+    var m = TW.modal('上传成绩 · ' + exam.name, '<div class="import-dialog"><div class="alert info">CSV 格式：首行表头含「姓名」和各学科列（列顺序不限，自动按列名识别）；支持 UTF-8 CSV（Excel 请"另存为 CSV"）；系统先校验并预览，不会直接覆盖。可先下载模板对照填写。</div><div class="toolbar" style="margin:10px 0"><button class="button secondary" id="examTemplate">⬇ 下载成绩模板</button></div><div class="field"><label class="required">选择成绩 CSV</label><input id="examImportFile" type="file" accept=".csv,text/csv"></div><div id="examImportPreview" class="import-preview note">尚未选择文件</div></div>', '<button class="button secondary" data-close>取消</button><button class="button secondary" id="examAppend" disabled>合并导入</button><button class="button" id="examReplace" disabled>替换导入</button>');
     var modalEl = m.root.querySelector('.modal'); if (modalEl) modalEl.classList.add('import-modal');
     var input = TW.$('#examImportFile'), preview = TW.$('#examImportPreview'), append = TW.$('#examAppend'), replace = TW.$('#examReplace');
     var parsed = null;
@@ -1789,14 +2387,21 @@
         try {
           var rows = TW.editable.parseCSV(reader.result);
           if (!rows.length) throw new Error('文件没有有效数据');
-          var expect = subj.length + 1;
-          var first = rows[0].map(function(v){ return String(v).trim(); });
-          var headerMatch = first[0] === '姓名' && subj.filter(function(k){ return first.indexOf(k) >= 0; }).length >= Math.max(1, Math.floor(subj.length / 2));
-          if (headerMatch) rows.shift();
-          if (!rows.length) throw new Error('文件只有表头，没有数据');
-          var bad = rows.findIndex(function(row){ return row.length !== expect; });
-          if (bad >= 0) throw new Error('第 ' + (bad + 1) + ' 行有 ' + rows[bad].length + ' 列，应为 ' + expect + ' 列（姓名 + ' + subj.length + ' 个学科）');
-          parsed = rows.map(function(row){ var o = { name: String(row[0]).trim() }; subj.forEach(function(k, i){ o[k] = num(row[i + 1]); }); return o; });
+          // 按表头列名解析（列顺序无关）：先定位「姓名」列和各学科列
+          var header = rows[0].map(function(v){ return String(v == null ? '' : v).trim(); });
+          var nameCol = header.indexOf('姓名');
+          if (nameCol < 0) throw new Error('表头缺少「姓名」列');
+          var colOf = {};
+          subj.forEach(function(k){ var idx = header.indexOf(k); if (idx >= 0) colOf[k] = idx; });
+          var missing = subj.filter(function(k){ return colOf[k] === undefined; });
+          if (missing.length) throw new Error('表头缺少学科列：' + missing.join('、') + '（请使用下载模板的列名）');
+          var body = rows.slice(1).filter(function(row){ return String(row[nameCol] || '').trim(); });
+          if (!body.length) throw new Error('文件只有表头，没有数据');
+          parsed = body.map(function(row){
+            var o = { name: String(row[nameCol] || '').trim() };
+            subj.forEach(function(k){ o[k] = num(row[colOf[k]]); });
+            return o;
+          });
           preview.innerHTML = '<strong>校验通过：' + parsed.length + ' 条、' + subj.length + ' 科</strong><div class="import-preview-grid">' + parsed.slice(0, 4).map(function(r){ return '<span>' + TW.escape(r.name) + '：' + subj.map(function(k){ return k + ' ' + (r[k] || '—'); }).join(' ｜ ') + '</span>'; }).join('') + '</div>';
           append.disabled = false; replace.disabled = false;
         } catch (error) { parsed = null; append.disabled = true; replace.disabled = true; preview.textContent = '校验失败：' + error.message; }
@@ -1958,7 +2563,7 @@
       return '<div class="schedule-grid">' + head + rows + '</div>';
     }
     TW.modal('课表管理（单双周）', '<div class="alert info">单周 / 双周可分开排课（支持调课自定义）；点击格子选择或清空班级。学期起始：<input id="schStart" type="date" value="' + semesterStartDate() + '" style="margin-left:6px"> <button class="button secondary small" id="schStartSave">设置学期起始</button></div><div class="toolbar" style="margin:10px 0;flex-wrap:wrap;gap:8px"><button class="button ' + (isOdd ? '' : 'secondary') + '" id="schTabOdd">单周</button><button class="button ' + (isOdd ? 'secondary' : '') + '" id="schTabEven">双周</button><button class="button secondary" id="schCopyOddEven">将单周复制到双周</button><button class="button secondary" id="schCopyEvenOdd">将双周复制到单周</button><button class="button secondary" id="schClear">清空当前周</button><button class="button secondary" id="schAddCls">＋ 教学班</button></div><div id="schGrid">' + gridHtml() + '</div>', '<button class="button secondary" data-close>关闭</button>');
-    var modalEl = TW.$('#modalRoot .modal'); if (modalEl) modalEl.style.width = 'min(860px,94vw)';
+    var modalEl = TW.$('#modalRoot .modal'); if (modalEl) { modalEl.classList.add('wide-modal'); modalEl.style.width = 'min(900px,94vw)'; }
     function rerender(){ TW.$('#schGrid').innerHTML = gridHtml(); }
     TW.$('#schTabOdd').onclick = function(){ isOdd = true; TW.$('#schTabOdd').className = 'button'; TW.$('#schTabEven').className = 'button secondary'; rerender(); };
     TW.$('#schTabEven').onclick = function(){ isOdd = false; TW.$('#schTabEven').className = 'button'; TW.$('#schTabOdd').className = 'button secondary'; rerender(); };
@@ -2104,8 +2709,27 @@
   }
 
   function newMeeting(){
-    TW.modal('记录班会', '<div class="form-grid"><div class="field"><label class="required">日期</label><input id="mDate" type="date" value="' + new Date().toISOString().slice(0,10) + '"></div><div class="field"><label class="required">主题</label><input id="mTopic"></div><div class="field full"><label>内容</label><textarea id="mContent" placeholder="班会讲了什么"></textarea></div></div>', '<button class="button secondary" data-close>取消</button><button class="button" id="mSave">保存</button>');
-    TW.$('#mSave').onclick = function(){ var t = TW.$('#mTopic').value.trim(); if (!t) { TW.toast('请填写主题', 'danger'); return; } TW.meetings.push({ date: TW.$('#mDate').value, topic: t, content: TW.$('#mContent').value.trim(), status: '已归档' }); cw('meetings', TW.meetings); TW.$('#modalRoot').innerHTML = ''; renderShell(); logRecord('班会与德育：记录班会', t); TW.toast('已记录班会'); };
+    TW.modal('记录班会', '<div class="form-grid"><div class="field"><label class="required">日期</label><input id="mDate" type="date" value="' + new Date().toISOString().slice(0,10) + '"></div><div class="field"><label class="required">主题</label><input id="mTopic"></div><div class="field full"><label>内容</label><textarea id="mContent" placeholder="班会讲了什么"></textarea></div><div class="field full"><label>附件（PPT/教案/照片等，可选，用于留档）</label><input id="mFile" type="file" multiple accept=".ppt,.pptx,.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.mp4,.zip,.txt"><div id="mFileList" class="note" style="margin-top:6px"></div></div></div>', '<button class="button secondary" data-close>取消</button><button class="button" id="mSave">保存</button>');
+    var fileInput = TW.$('#mFile'), pickedFiles = [];
+    fileInput.onchange = function(){
+      pickedFiles = Array.prototype.slice.call(fileInput.files || []);
+      TW.$('#mFileList').textContent = pickedFiles.length ? '已选择 ' + pickedFiles.length + ' 个文件：' + pickedFiles.map(function(f){ return f.name; }).join('、') : '';
+    };
+    TW.$('#mSave').onclick = function(){
+      var t = TW.$('#mTopic').value.trim();
+      if (!t) { TW.toast('请填写主题', 'danger'); return; }
+      var rec = { date: TW.$('#mDate').value, topic: t, content: TW.$('#mContent').value.trim(), status: '已归档', attachments: [] };
+      function finish(){ TW.meetings.push(rec); cw('meetings', TW.meetings); TW.$('#modalRoot').innerHTML = ''; renderShell(); logRecord('班会与德育：记录班会', t); TW.toast('已记录班会'); }
+      if (!pickedFiles.length) { finish(); return; }
+      var pending = pickedFiles.length, failed = false;
+      pickedFiles.forEach(function(file){
+        if (file.size > 70 * 1024 * 1024) { failed = true; pending--; if (!pending) { finish(); TW.toast('有文件超过 70MB 已跳过', 'danger'); } return; }
+        TW.files.put(file, { kind: 'meeting', topic: t }).then(function(info){
+          rec.attachments.push({ id: info.id, name: file.name });
+          pending--; if (!pending) finish();
+        }).catch(function(){ failed = true; pending--; if (!pending) { finish(); TW.toast('部分附件上传失败，文字已保存', 'danger'); } });
+      });
+    };
   }
   function newMeetingPlan(){
     TW.modal('新增班会计划', '<div class="form-grid"><div class="field"><label class="required">日期</label><input id="mpDate" type="date" value="' + new Date().toISOString().slice(0,10) + '"></div><div class="field"><label class="required">主题</label><input id="mpTopic"></div><div class="field full"><label>目标</label><input id="mpGoal" placeholder="这次班会要达到什么目的"></div></div>', '<button class="button secondary" data-close>取消</button><button class="button" id="mpSave">保存</button>');
@@ -2125,12 +2749,12 @@
   }
   function dormFormModal(idx){
     var isEdit = (idx != null) && TW.dorm[idx];
-    var d = isEdit ? TW.dorm[idx] : { room: '', leader: '', members: '', note: '', score: '' };
-    TW.modal((isEdit ? '宿舍详情 · ' + d.room : '新增宿舍'), '<div class="form-grid"><div class="field"><label class="required">宿舍号</label><input id="dRoom" value="' + TW.escape(d.room || '') + '" placeholder="如 A403"></div><div class="field"><label>舍长</label><input id="dLeader" value="' + TW.escape(d.leader || '') + '"></div><div class="field"><label>当前宿舍分数</label><input id="dScore" type="number" min="0" step="1" value="' + TW.escape(d.score != null ? String(d.score) : '') + '" placeholder="如 95"></div><div class="field full"><label>成员名单</label><input id="dMembers" value="' + TW.escape(d.members || '') + '" placeholder="如 张三、李四、王五"></div><div class="field full"><label>备注</label><input id="dNote" value="' + TW.escape(d.note || '') + '" placeholder="如 就寝纪律、卫生情况"></div></div>', '<button class="button secondary" data-close>取消</button>' + (isEdit ? '<button class="button danger" id="dDel">删除宿舍</button>' : '') + '<button class="button" id="dSave">保存</button>');
+    var d = isEdit ? TW.dorm[idx] : { room: '', leader: '', members: '', note: '', score: '', gender: '' };
+    TW.modal((isEdit ? '宿舍详情 · ' + d.room : '新增宿舍'), '<div class="form-grid"><div class="field"><label class="required">宿舍号</label><input id="dRoom" value="' + TW.escape(d.room || '') + '" placeholder="如 A403"></div><div class="field"><label>宿舍性别</label><select id="dGender"><option value="">未设置</option><option value="男"' + (d.gender === '男' ? ' selected' : '') + '>男生宿舍</option><option value="女"' + (d.gender === '女' ? ' selected' : '') + '>女生宿舍</option></select></div><div class="field"><label>舍长</label><input id="dLeader" value="' + TW.escape(d.leader || '') + '"></div><div class="field"><label>当前宿舍分数</label><input id="dScore" type="number" min="0" step="1" value="' + TW.escape(d.score != null ? String(d.score) : '') + '" placeholder="如 95"></div><div class="field full"><label>成员名单</label><input id="dMembers" value="' + TW.escape(d.members || '') + '" placeholder="如 张三、李四、王五"></div><div class="field full"><label>备注</label><input id="dNote" value="' + TW.escape(d.note || '') + '" placeholder="如 就寝纪律、卫生情况"></div></div>', '<button class="button secondary" data-close>取消</button>' + (isEdit ? '<button class="button danger" id="dDel">删除宿舍</button>' : '') + '<button class="button" id="dSave">保存</button>');
     TW.$('#dSave').onclick = function(){
       var r = TW.$('#dRoom').value.trim();
       if (!r) { TW.toast('请填写宿舍号', 'danger'); return; }
-      var obj = { room: r, leader: TW.$('#dLeader').value.trim(), members: TW.$('#dMembers').value.trim(), note: TW.$('#dNote').value.trim(), score: TW.$('#dScore').value.trim() };
+      var obj = { room: r, gender: TW.$('#dGender').value, leader: TW.$('#dLeader').value.trim(), members: TW.$('#dMembers').value.trim(), note: TW.$('#dNote').value.trim(), score: TW.$('#dScore').value.trim() };
       if (isEdit) TW.dorm[idx] = obj; else TW.dorm.push(obj);
       cw('dorm', TW.dorm); TW.$('#modalRoot').innerHTML = ''; renderShell();
       logRecord('宿舍管理：' + (isEdit ? '编辑' : '新增') + '宿舍', r); TW.toast(isEdit ? '宿舍信息已更新' : '已新增宿舍');
